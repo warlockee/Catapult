@@ -1,0 +1,34 @@
+# Benchmarker Docker Image
+#
+# Standalone container for running ML model benchmarks with HTTP progress callbacks.
+#
+# Usage:
+#   docker build -t benchmarker:latest -f Dockerfile.benchmarker .
+#   docker run --rm benchmarker:latest \
+#     --endpoint-url "http://host.docker.internal:8000" \
+#     --callback-url "http://host.docker.internal:8080/internal/benchmarks" \
+#     --benchmark-id "abc123"
+
+FROM python:3.11-slim
+
+LABEL maintainer="Catapult"
+LABEL description="Benchmarker for ML model endpoints"
+LABEL version="1.0.0"
+
+WORKDIR /app
+
+# Install dependencies (use mirror for better connectivity)
+RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple httpx[http2]
+
+# Copy benchmarker package
+COPY benchmarker/ /app/benchmarker/
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Health check (validates the module can be imported)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD python -c "import benchmarker" || exit 1
+
+ENTRYPOINT ["python", "-m", "benchmarker"]

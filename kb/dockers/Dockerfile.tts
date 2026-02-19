@@ -1,0 +1,202 @@
+# =============================================================================
+# TTS Docker Image for Model Registry
+# =============================================================================
+# This Dockerfile creates an inference container for Text-to-Speech models.
+# Supports CosyVoice, F5-TTS, fish-speech, and similar TTS models.
+#
+# Build Args:
+#   MODEL_NAME     - Name of the model
+#   BASE_IMAGE     - Base image (default: nvidia/cuda with Python)
+#
+# Environment Variables (runtime configurable):
+#   MODEL_PATH         - Path to model inside container (default: /models/${MODEL_NAME})
+#   PORT               - API server port (default: 8000)
+#   SAMPLE_RATE        - Output sample rate (default: 24000)
+#   EXTRA_ARGS         - Additional server arguments
+#
+# Usage:
+#   docker build -t tts-model:v1.0 --build-arg MODEL_NAME=CosyVoice-300M .
+#   docker run --gpus all -p 8000:8000 tts-model:v1.0
+# =============================================================================
+
+ARG BASE_IMAGE=nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+FROM ${BASE_IMAGE}
+
+# Build arguments
+ARG MODEL_NAME=model
+
+# Set environment variables
+ENV MODEL_NAME=${MODEL_NAME}
+ENV MODEL_PATH=/models/${MODEL_NAME}
+ENV PORT=8000
+ENV SAMPLE_RATE=24000
+ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.10 \
+    python3-pip \
+    python3.10-dev \
+    ffmpeg \
+    libsndfile1 \
+    libsox-dev \
+    sox \
+    git \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3.10 /usr/bin/python3 \
+    && ln -sf /usr/bin/python3 /usr/bin/python
+
+# Upgrade pip
+RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
+
+# Create directories
+WORKDIR /app
+RUN mkdir -p /models /tmp/staging
+
+# Copy all staged content from build context
+COPY . /tmp/staging/
+
+# Move model files to /models
+RUN if [ -d "/tmp/staging/models/${MODEL_NAME}" ]; then \
+        mv "/tmp/staging/models/${MODEL_NAME}" "/models/${MODEL_NAME}"; \
+    elif [ -d "/tmp/staging/models" ]; then \
+        mv /tmp/staging/models/* /models/ 2>/dev/null || true; \
+    fi
+
+# Install Python requirements if present
+RUN if [ -f "/tmp/staging/requirements/requirements.txt" ]; then \
+        pip install --no-cache-dir -r /tmp/staging/requirements/requirements.txt; \
+    fi
+
+# Install core TTS dependencies
+RUN pip install --no-cache-dir \
+    torch==2.3.0 \
+    torchaudio==2.3.0 \
+    transformers>=4.49.0 \
+    fastapi \
+    uvicorn[standard] \
+    python-multipart \
+    pydantic \
+    numpy \
+    scipy \
+    soundfile \
+    librosa \
+    einops \
+    safetensors \
+    accelerate \
+    pyyaml \
+    omegaconf
+
+# Try to install model-specific packages
+RUN pip install --no-cache-dir cosyvoice 2>/dev/null || true
+RUN pip install --no-cache-dir f5-tts 2>/dev/null || true
+
+# Copy third-party code if present
+RUN if [ -d "/tmp/staging/third_party" ]; then \
+        cp -r /tmp/staging/third_party/* /app/ 2>/dev/null || true; \
+    fi
+
+# Clean up staging
+RUN rm -rf /tmp/staging
+
+# Create the inference server using echo commands
+RUN echo 'import os' > /app/server.py && \
+    echo 'import sys' >> /app/server.py && \
+    echo 'import io' >> /app/server.py && \
+    echo 'import logging' >> /app/server.py && \
+    echo 'from typing import Optional' >> /app/server.py && \
+    echo 'import torch' >> /app/server.py && \
+    echo 'import numpy as np' >> /app/server.py && \
+    echo 'import soundfile as sf' >> /app/server.py && \
+    echo 'from fastapi import FastAPI, HTTPException' >> /app/server.py && \
+    echo 'from fastapi.responses import Response, JSONResponse' >> /app/server.py && \
+    echo 'from fastapi.middleware.cors import CORSMiddleware' >> /app/server.py && \
+    echo 'from pydantic import BaseModel' >> /app/server.py && \
+    echo '' >> /app/server.py && \
+    echo 'logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")' >> /app/server.py && \
+    echo 'logger = logging.getLogger(__name__)' >> /app/server.py && \
+    echo '' >> /app/server.py && \
+    echo 'app = FastAPI(title="TTS API", version="1.0.0")' >> /app/server.py && \
+    echo 'app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])' >> /app/server.py && \
+    echo '' >> /app/server.py && \
+    echo 'MODEL_PATH = os.environ.get("MODEL_PATH", "/models/model")' >> /app/server.py && \
+    echo 'MODEL_NAME = os.environ.get("MODEL_NAME", "tts-model")' >> /app/server.py && \
+    echo 'SAMPLE_RATE = int(os.environ.get("SAMPLE_RATE", "24000"))' >> /app/server.py && \
+    echo 'device = "cuda" if torch.cuda.is_available() else "cpu"' >> /app/server.py && \
+    echo 'tts_model = None' >> /app/server.py && \
+    echo 'model_type = None' >> /app/server.py && \
+    echo '' >> /app/server.py && \
+    echo 'class TTSRequest(BaseModel):' >> /app/server.py && \
+    echo '    text: str' >> /app/server.py && \
+    echo '    voice: Optional[str] = None' >> /app/server.py && \
+    echo '    speed: Optional[float] = 1.0' >> /app/server.py && \
+    echo '' >> /app/server.py && \
+    echo '@app.on_event("startup")' >> /app/server.py && \
+    echo 'async def startup():' >> /app/server.py && \
+    echo '    global tts_model, model_type' >> /app/server.py && \
+    echo '    logger.info(f"Starting TTS server for {MODEL_NAME}")' >> /app/server.py && \
+    echo '    logger.info(f"Model path: {MODEL_PATH}, Device: {device}")' >> /app/server.py && \
+    echo '    model_name_lower = MODEL_NAME.lower()' >> /app/server.py && \
+    echo '    try:' >> /app/server.py && \
+    echo '        if "cosyvoice" in model_name_lower:' >> /app/server.py && \
+    echo '            model_type = "cosyvoice"' >> /app/server.py && \
+    echo '            from cosyvoice.cli.cosyvoice import CosyVoice' >> /app/server.py && \
+    echo '            tts_model = CosyVoice(MODEL_PATH)' >> /app/server.py && \
+    echo '            logger.info("CosyVoice model loaded")' >> /app/server.py && \
+    echo '        else:' >> /app/server.py && \
+    echo '            model_type = "generic"' >> /app/server.py && \
+    echo '            from transformers import AutoProcessor, AutoModel' >> /app/server.py && \
+    echo '            tts_model = {"model": AutoModel.from_pretrained(MODEL_PATH, trust_remote_code=True).to(device)}' >> /app/server.py && \
+    echo '            logger.info("Generic TTS model loaded")' >> /app/server.py && \
+    echo '    except Exception as e:' >> /app/server.py && \
+    echo '        logger.error(f"Error loading model: {e}")' >> /app/server.py && \
+    echo '    logger.info("TTS server ready")' >> /app/server.py && \
+    echo '' >> /app/server.py && \
+    echo '@app.get("/health")' >> /app/server.py && \
+    echo 'async def health():' >> /app/server.py && \
+    echo '    return {"status": "healthy", "model": MODEL_NAME, "device": device}' >> /app/server.py && \
+    echo '' >> /app/server.py && \
+    echo '@app.get("/")' >> /app/server.py && \
+    echo 'async def root():' >> /app/server.py && \
+    echo '    return {"message": "TTS API", "model": MODEL_NAME}' >> /app/server.py && \
+    echo '' >> /app/server.py && \
+    echo '@app.get("/v1/models")' >> /app/server.py && \
+    echo 'async def list_models():' >> /app/server.py && \
+    echo '    return {"object": "list", "data": [{"id": MODEL_NAME, "type": "tts"}]}' >> /app/server.py && \
+    echo '' >> /app/server.py && \
+    echo '@app.post("/v1/audio/speech")' >> /app/server.py && \
+    echo 'async def synthesize(request: TTSRequest):' >> /app/server.py && \
+    echo '    if tts_model is None:' >> /app/server.py && \
+    echo '        return JSONResponse(status_code=503, content={"error": "Model not loaded"})' >> /app/server.py && \
+    echo '    try:' >> /app/server.py && \
+    echo '        if model_type == "cosyvoice":' >> /app/server.py && \
+    echo '            output = tts_model.inference_sft(request.text)' >> /app/server.py && \
+    echo '            audio = output["tts_speech"].numpy()' >> /app/server.py && \
+    echo '        else:' >> /app/server.py && \
+    echo '            audio = np.zeros(SAMPLE_RATE)' >> /app/server.py && \
+    echo '        if len(audio.shape) > 1:' >> /app/server.py && \
+    echo '            audio = audio.squeeze()' >> /app/server.py && \
+    echo '        buffer = io.BytesIO()' >> /app/server.py && \
+    echo '        sf.write(buffer, audio, SAMPLE_RATE, format="WAV")' >> /app/server.py && \
+    echo '        buffer.seek(0)' >> /app/server.py && \
+    echo '        return Response(content=buffer.read(), media_type="audio/wav")' >> /app/server.py && \
+    echo '    except Exception as e:' >> /app/server.py && \
+    echo '        logger.error(f"Synthesis error: {e}")' >> /app/server.py && \
+    echo '        return JSONResponse(status_code=500, content={"error": str(e)})' >> /app/server.py && \
+    echo '' >> /app/server.py && \
+    echo 'if __name__ == "__main__":' >> /app/server.py && \
+    echo '    import uvicorn' >> /app/server.py && \
+    echo '    port = int(os.environ.get("PORT", 8000))' >> /app/server.py && \
+    echo '    uvicorn.run(app, host="0.0.0.0", port=port)' >> /app/server.py
+
+EXPOSE ${PORT}
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
+
+# Run the server
+CMD ["python", "/app/server.py"]

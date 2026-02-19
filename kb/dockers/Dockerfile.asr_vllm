@@ -1,0 +1,104 @@
+# =============================================================================
+# ASR vLLM Docker Image for Audio Models
+# =============================================================================
+# Uses custom-vllm base image with audio model architecture support.
+# Designed for audio understanding models (audio-model-v3, etc.)
+#
+# Build Args:
+#   CUSTOM_VLLM_BASE - Base image with audio model support
+#                      (default: custom-vllm:v0.10.2-testing)
+#   MODEL_NAME       - Model directory name in /models
+#
+# Note: The base image must have the audio model architecture registered.
+# Stock vLLM images do NOT work as they lack the custom model registration.
+#
+# =============================================================================
+
+ARG CUSTOM_VLLM_BASE=custom-vllm:v0.10.2-testing
+FROM ${CUSTOM_VLLM_BASE}
+
+ARG MODEL_NAME=model
+ENV MODEL_NAME=${MODEL_NAME}
+
+WORKDIR /workspace
+
+# Copy staged content from build context
+COPY . /tmp/staging/
+
+# Note: Base image (custom-vllm) already has audio model support.
+# The precompiled wheel is only needed if upgrading to a newer version.
+RUN for whl in /tmp/staging/*.whl; do \
+        if [ -f "$whl" ] && [ "$(basename $whl)" != "dummy_wheel.whl" ]; then \
+            echo "Found wheel: $whl (skipping - base image has audio model support)"; \
+        fi; \
+    done
+
+# Install extra requirements if present
+RUN if [ -f /tmp/staging/requirements/extra.txt ]; then \
+        pip install --no-cache-dir -r /tmp/staging/requirements/extra.txt; \
+    fi
+
+# Install xcodec if present (for audio generation)
+RUN if [ -d /tmp/staging/third_party/xcodec ]; then \
+        pip install --no-cache-dir -e /tmp/staging/third_party/xcodec --no-deps; \
+    fi
+
+# Move model files to /models
+RUN mkdir -p /models && \
+    if [ -d "/tmp/staging/models/${MODEL_NAME}" ]; then \
+        mv "/tmp/staging/models/${MODEL_NAME}" "/models/${MODEL_NAME}"; \
+    elif [ -d "/tmp/staging/models" ]; then \
+        mv /tmp/staging/models/* /models/ 2>/dev/null || true; \
+    fi
+
+# Pre-cache whisper model for audio processing (required by audio model)
+# This ensures the container works offline without HuggingFace access
+ENV HF_HOME=/hf_cache
+RUN mkdir -p /hf_cache/hub && \
+    if [ -d "/tmp/staging/hf_cache/models--openai--whisper-large-v3-turbo" ]; then \
+        echo "Using pre-staged whisper model cache"; \
+        mv /tmp/staging/hf_cache/models--openai--whisper-large-v3-turbo /hf_cache/hub/; \
+    else \
+        echo "Downloading whisper model..."; \
+        python3 -c "from huggingface_hub import snapshot_download; snapshot_download('openai/whisper-large-v3-turbo')" || \
+        echo "Warning: Could not download whisper model. Container may require network access at runtime."; \
+    fi
+
+# Cleanup staging
+RUN rm -rf /tmp/staging
+
+# Runtime configuration
+ENV PORT=8000
+ENV GPU_MEMORY_UTIL=0.9
+ENV TENSOR_PARALLEL=1
+ENV MAX_MODEL_LEN=8192
+ENV MAX_NUM_SEQS=174
+ENV HF_HOME=/hf_cache
+ENV HF_HUB_OFFLINE=1
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
+
+EXPOSE ${PORT}
+
+# Entrypoint for ASR vLLM server
+ENTRYPOINT ["/bin/bash", "-c", "\
+    MODEL_DIR=\"/models/${MODEL_NAME}\"; \
+    if [ ! -d \"$MODEL_DIR\" ]; then \
+        MODEL_DIR=$(find /models -mindepth 1 -maxdepth 1 -type d | head -1); \
+    fi; \
+    if [ -z \"$MODEL_DIR\" ]; then echo 'ERROR: No model found'; exit 1; fi; \
+    echo \"Starting vLLM ASR server with model: $MODEL_DIR\"; \
+    exec python3 -m vllm.entrypoints.openai.api_server \
+        --model ${MODEL_DIR} \
+        --served-model-name ${SERVED_MODEL_NAME:-${MODEL_NAME}} \
+        --port ${PORT} \
+        --gpu-memory-utilization ${GPU_MEMORY_UTIL} \
+        --tensor-parallel-size ${TENSOR_PARALLEL} \
+        --max-model-len ${MAX_MODEL_LEN} \
+        --max-num-seqs ${MAX_NUM_SEQS} \
+        --trust-remote-code \
+        --enable-prefix-caching \
+        ${EXTRA_ARGS:-} \
+"]

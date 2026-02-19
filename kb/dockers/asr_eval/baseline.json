@@ -1,0 +1,9 @@
+{
+  "dataset": "common_voice_15_en_subset_500",
+  "expected_wer": 0.1355,
+  "expected_wer_tolerance": 0.01,
+  "model": "audio-model-v3-1.7b-chk-65000",
+  "description": "Baseline WER for vLLM-based inference (allinone Docker) with repetition_penalty=1.1",
+  "evaluated_on": "2026-02-02",
+  "notes": "Fixed WER gap by adding repetition_penalty=1.1 to prevent repetition loops. h100-31 reference: 13.12%, allinone: 13.55%. Without repetition_penalty, allinone produces repetition loops on some samples causing inflated WER."
+}
