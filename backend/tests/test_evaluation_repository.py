@@ -9,13 +9,14 @@ Tests cover:
 
 Run with: pytest backend/tests/test_evaluation_repository.py -v
 """
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
+import pytest
+
 from app.core.exceptions import (
-    EvaluationNotFoundError,
     EvaluationNotCancellableError,
+    EvaluationNotFoundError,
 )
 
 

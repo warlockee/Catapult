@@ -7,9 +7,10 @@ Provides a foundation for domain-specific repositories with:
 - Pagination support
 - Query building helpers
 """
-from typing import TypeVar, Generic, Optional, List, Tuple, Type, Any
+from typing import Any, Generic, List, Optional, Tuple, Type, TypeVar
 from uuid import UUID
-from sqlalchemy import select, func, desc
+
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 

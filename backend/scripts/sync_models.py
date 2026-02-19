@@ -7,17 +7,17 @@ import asyncio
 import os
 import sys
 from pathlib import Path
-from datetime import datetime
+
 from sqlalchemy import select
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from sqlalchemy.orm import configure_mappers
+
 from app.core.config import settings
 from app.core.database import async_session_maker
-from app.models import Model, Release, Deployment, Artifact
-from app.models.docker_build import DockerBuild
-from sqlalchemy.orm import configure_mappers
+from app.models import Model, Release
 
 # Force mapper configuration
 configure_mappers()

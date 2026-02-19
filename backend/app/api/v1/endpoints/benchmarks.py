@@ -1,14 +1,15 @@
 """
 API endpoints for deployment benchmarks.
 """
-from typing import List, Optional
+from typing import List
 from uuid import UUID
+
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import verify_api_key, require_operator
 from app.core.exceptions import InvalidBenchmarkConfigError
+from app.core.security import require_operator, verify_api_key
 from app.models.api_key import ApiKey
 from app.repositories.benchmark_repository import BenchmarkRepository
 from app.schemas.benchmark import (

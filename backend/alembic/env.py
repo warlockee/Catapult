@@ -1,9 +1,11 @@
 """Alembic environment configuration."""
 import asyncio
 from logging.config import fileConfig
+
 from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
+
 from alembic import context
 
 # Import settings and Base
@@ -11,16 +13,6 @@ from app.core.config import settings
 from app.core.database import Base
 
 # Import all models so they're registered with Base
-from app.models.model import Model
-from app.models.version import Version
-from app.models.deployment import Deployment
-from app.models.api_key import ApiKey
-from app.models.audit_log import AuditLog
-from app.models.artifact import Artifact
-from app.models.docker_build import DockerBuild
-from app.models.docker_build_artifact import DockerBuildArtifact
-from app.models.benchmark import Benchmark
-from app.models.evaluation import Evaluation
 
 # Alembic Config object
 config = context.config

@@ -8,32 +8,33 @@ import re
 from dataclasses import asdict
 from typing import Optional
 from uuid import UUID
+
 from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import verify_api_key, require_operator
+from app.core.security import require_operator, verify_api_key
 from app.models.api_key import ApiKey
 from app.repositories.deployment_repository import DeploymentRepository
+from app.repositories.model_repository import ModelRepository
+from app.repositories.version_repository import VersionRepository
 from app.schemas.deployment import (
+    ContainerStatusResponse,
     DeploymentCreate,
-    DeploymentResponse,
-    DeploymentWithRelease,
     DeploymentExecuteCreate,
     DeploymentExecuteResponse,
-    ContainerStatusResponse,
     DeploymentLogsResponse,
+    DeploymentResponse,
     DeploymentType,
+    DeploymentWithRelease,
 )
 from app.schemas.pagination import PaginatedResponse
 from app.services.audit_service import create_audit_log
-from app.services.deployment_sync_service import deployment_sync_service
 from app.services.deployment.deployment_service import deployment_service
 from app.services.deployment.executor_base import DeploymentConfig
 from app.services.deployment.local_executor import local_executor
-from app.repositories.version_repository import VersionRepository
-from app.repositories.model_repository import ModelRepository
+from app.services.deployment_sync_service import deployment_sync_service
 from app.services.task_dispatcher import task_dispatcher
 
 router = APIRouter()

@@ -1,11 +1,10 @@
-import os
 import asyncio
 import logging
-from datetime import datetime, timedelta
+import os
 from uuid import UUID
+
 from celery import Celery, Task
 from celery.signals import worker_ready
-from kombu import Queue
 
 logger = logging.getLogger(__name__)
 
@@ -69,9 +68,10 @@ class DeploymentTask(Task):
             True if marked successfully, False otherwise
         """
         try:
+            from sqlalchemy import select
+
             from app.core.async_helpers import run_async_with_db
             from app.models.deployment import Deployment
-            from sqlalchemy import select
 
             async def mark_failed(db):
                 stmt = select(Deployment).where(Deployment.id == UUID(deployment_id))

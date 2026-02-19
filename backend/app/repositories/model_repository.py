@@ -4,15 +4,15 @@ Repository for Model entity database operations.
 Encapsulates all database queries related to models, providing a clean
 interface for services and endpoints to interact with model data.
 """
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
 from uuid import UUID
-from sqlalchemy import select, func, desc
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.repositories.base import BaseRepository
+from sqlalchemy import desc, func, select
+
+from app.core.exceptions import ModelAlreadyExistsError, ModelNotFoundError
 from app.models.model import Model
 from app.models.version import Version
-from app.core.exceptions import ModelNotFoundError, ModelAlreadyExistsError
+from app.repositories.base import BaseRepository
 
 
 class ModelRepository(BaseRepository[Model]):

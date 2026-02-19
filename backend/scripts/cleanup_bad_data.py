@@ -5,13 +5,15 @@ Script to clean up bad data (models/releases named .git)
 import asyncio
 import sys
 from pathlib import Path
-from sqlalchemy import select, delete
+
+from sqlalchemy import delete
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.core.database import async_session_maker
 from app.models import Model, Release
+
 
 async def cleanup():
     async with async_session_maker() as session:

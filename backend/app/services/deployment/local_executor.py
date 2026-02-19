@@ -7,7 +7,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime
-from typing import List, Optional, AsyncIterator
+from typing import AsyncIterator, List, Optional
 from uuid import UUID
 
 import httpx
@@ -15,10 +15,10 @@ import httpx
 from app.core.config import settings
 from app.core.exceptions import ContainerNotFoundError
 from app.services.deployment.executor_base import (
-    DeploymentExecutor,
-    DeploymentConfig,
-    DeploymentResult,
     ContainerStatus,
+    DeploymentConfig,
+    DeploymentExecutor,
+    DeploymentResult,
 )
 from app.services.deployment.gpu_service import GpuService
 

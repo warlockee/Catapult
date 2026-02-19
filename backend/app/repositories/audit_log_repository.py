@@ -1,13 +1,12 @@
 """
 Repository for AuditLog entity database operations.
 """
-from typing import Optional, List
-from uuid import UUID
-from sqlalchemy import select, desc, and_
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List, Optional
 
-from app.repositories.base import BaseRepository
+from sqlalchemy import and_, desc, select
+
 from app.models.audit_log import AuditLog
+from app.repositories.base import BaseRepository
 
 
 class AuditLogRepository(BaseRepository[AuditLog]):

@@ -8,9 +8,9 @@ synchronously within the same request context.
 For async/background processing, handlers can enqueue Celery tasks.
 """
 import logging
-from typing import Callable, Dict, List, Any, Type
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any, Callable, Dict, List, Type
 from uuid import UUID
 
 logger = logging.getLogger(__name__)

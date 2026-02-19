@@ -5,12 +5,11 @@ Handles:
 - Archiving completed build metadata
 - Syncing archived jobs back to database
 """
+import logging
 import os
 import shutil
-import logging
-from typing import Optional, Dict, Any
 from datetime import datetime
-from uuid import UUID
+from typing import Any, Dict, Optional
 
 import yaml
 

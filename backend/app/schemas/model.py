@@ -2,10 +2,10 @@
 Pydantic schemas for Model.
 """
 from datetime import datetime
-from typing import Optional, Dict, Any, List, Literal
-from pydantic import BaseModel, Field
+from typing import Any, Dict, List, Literal, Optional
 from uuid import UUID
 
+from pydantic import BaseModel, Field
 
 # Server types for model deployment
 # These must stay in sync with SERVER_TYPE_TEMPLATES in dockerfile_service.py

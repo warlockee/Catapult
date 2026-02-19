@@ -26,8 +26,9 @@ TERMINOLOGY:
 """
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Index, Boolean
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Index, String
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base

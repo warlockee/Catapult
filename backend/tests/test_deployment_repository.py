@@ -3,12 +3,13 @@ Tests for DeploymentRepository.
 
 Tests the repository methods for deployment state management.
 """
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
-from app.repositories.deployment_repository import DeploymentRepository
+import pytest
+
 from app.core.exceptions import DeploymentNotFoundError
+from app.repositories.deployment_repository import DeploymentRepository
 
 
 class TestDeploymentRepositoryUpdateStatus:

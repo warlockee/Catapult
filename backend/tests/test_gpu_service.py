@@ -10,9 +10,9 @@ Tests cover:
 
 Run with: pytest backend/tests/test_gpu_service.py -v
 """
-import asyncio
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 
 
 class TestGpuServiceDetection:
@@ -95,7 +95,7 @@ class TestGpuServiceDetection:
             # Second call should use cache
             available2, count2 = await gpu_service.detect_gpu()
 
-        assert available1 == available2 == True
+        assert available1 is True and available2 is True
         assert count1 == count2 == 1
         # Should only have been called twice (docker info + nvidia-smi), not four times
         assert mock_exec.call_count == 2

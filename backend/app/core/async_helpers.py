@@ -19,7 +19,7 @@ Usage:
 """
 import asyncio
 import logging
-from typing import TypeVar, Callable, Awaitable, Optional, Any
+from typing import Awaitable, Callable, Optional, TypeVar
 
 from sqlalchemy.ext.asyncio import AsyncSession
 

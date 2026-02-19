@@ -16,7 +16,6 @@ Usage:
         # ... test code
 """
 import logging
-from abc import ABC, abstractmethod
 from typing import Optional, Protocol
 from uuid import UUID
 

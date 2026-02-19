@@ -1,18 +1,17 @@
 """
 Repository for Evaluation entity database operations.
 """
-from typing import Optional, List
+from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import select, desc
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import desc, select
 
-from app.repositories.base import BaseRepository
-from app.models.evaluation import Evaluation
 from app.core.exceptions import (
-    EvaluationNotFoundError,
     EvaluationNotCancellableError,
+    EvaluationNotFoundError,
 )
+from app.models.evaluation import Evaluation
+from app.repositories.base import BaseRepository
 
 
 class EvaluationRepository(BaseRepository[Evaluation]):

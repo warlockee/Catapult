@@ -10,8 +10,9 @@ Deployment tasks use DeploymentTask base class for automatic failure handling.
 import json
 import logging
 from uuid import UUID
-from app.core.celery_app import celery_app, DeploymentTask
+
 from app.core.async_helpers import run_async, run_async_with_db
+from app.core.celery_app import DeploymentTask, celery_app
 from app.services.docker_service import docker_service
 
 logger = logging.getLogger(__name__)
@@ -206,10 +207,12 @@ def build_docker_image(build_id: str):
     logger.info(f"Starting build task for {build_id}")
     try:
         async def validate_and_run():
-            from app.models.docker_build import DockerBuild
-            from app.core.database import async_session_maker
-            from sqlalchemy import select
             from datetime import datetime
+
+            from sqlalchemy import select
+
+            from app.core.database import async_session_maker
+            from app.models.docker_build import DockerBuild
 
             async with async_session_maker() as db:
                 # Fetch the build record
@@ -306,8 +309,8 @@ def get_docker_disk_usage_task():
     Runs in worker which has Docker socket access.
     Returns dict with Docker usage stats.
     """
-    import subprocess
     import shutil
+    import subprocess
 
     def parse_docker_size(size_str: str) -> int:
         """Parse Docker size string (e.g., '1.5GB', '500MB') to bytes."""
@@ -439,7 +442,9 @@ def sync_mlflow_metadata_task(version_id: str):
     try:
         async def do_sync(db):
             from datetime import datetime, timezone
+
             from sqlalchemy import select
+
             from app.models.version import Version
             from app.services.mlflow_service import mlflow_service
 
@@ -490,6 +495,7 @@ def run_benchmark_task(benchmark_id: str):
     logger.info(f"Starting benchmark task for {benchmark_id}")
     try:
         from sqlalchemy import select
+
         from app.models.benchmark import Benchmark
 
         async def run_benchmark(db):

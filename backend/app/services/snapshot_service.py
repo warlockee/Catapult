@@ -1,15 +1,15 @@
-import os
-import shutil
 import asyncio
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
-from urllib.parse import urlparse, unquote
+from typing import Optional
+from urllib.parse import unquote, urlparse
+
+from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.database import async_session_maker
-from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 

@@ -4,14 +4,14 @@ Evaluation API endpoints - quality metrics (WER/CER) separate from benchmarks (l
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.exceptions import DeploymentNotFoundError
+from app.core.security import require_operator, verify_api_key
 from app.models.api_key import ApiKey
 from app.models.evaluation import Evaluation
-from app.core.security import verify_api_key, require_operator
 from app.repositories.deployment_repository import DeploymentRepository
 from app.repositories.evaluation_repository import EvaluationRepository
 from app.schemas.evaluation import (
@@ -67,12 +67,12 @@ async def _run_evaluation_task(
     from app.core.database import async_session_maker
 
     async with async_session_maker() as db:
-        print(f"[EVAL] Got DB session", file=sys.stderr, flush=True)
+        print("[EVAL] Got DB session", file=sys.stderr, flush=True)
         repo = EvaluationRepository(db)
         evaluation = await repo.get_by_id(evaluation_id)
         print(f"[EVAL] Got evaluation record: {evaluation is not None}", file=sys.stderr, flush=True)
         if not evaluation:
-            print(f"[EVAL] Evaluation not found, returning", file=sys.stderr, flush=True)
+            print("[EVAL] Evaluation not found, returning", file=sys.stderr, flush=True)
             return
 
         try:

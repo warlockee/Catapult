@@ -1,9 +1,9 @@
 import re
-from pydantic import BaseModel, field_validator
-from typing import Optional, List
-from uuid import UUID
 from datetime import datetime
+from typing import List, Optional
+from uuid import UUID
 
+from pydantic import BaseModel, field_validator
 
 # Docker image tag regex pattern
 # Repository: lowercase letters, digits, separators (., _, -, /)
