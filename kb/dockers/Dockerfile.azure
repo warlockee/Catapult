@@ -1,0 +1,140 @@
+# Dockerfile for Azure AI Foundry MaaP (Model-as-a-Platform) Deployment
+# Optimized for NVIDIA A100 GPU with BYOC (Bring Your Own Container)
+#
+# Based on Dockerfile.a100 with all checkpoint-1200 fixes applied:
+# - Python 3.12 for wheel compatibility
+# - xcodec fixes (scipy, dac import, __init__.py)
+# - vLLM custom entrypoint on port 26000
+# - Health check endpoint /health
+
+FROM mcr.microsoft.com/azureml/curated/foundation-model-inference:latest
+
+ARG CUDA_VERSION=12.4.1
+ARG PYTHON_VERSION=3.12
+
+WORKDIR /vllm-workspace
+COPY . .
+
+ENV DEBIAN_FRONTEND=noninteractive
+ARG TARGETPLATFORM
+
+ARG max_jobs=32
+ENV MAX_JOBS=${max_jobs}
+ARG nvcc_threads=64
+ENV NVCC_THREADS=$nvcc_threads
+
+RUN PYTHON_VERSION_STR=$(echo ${PYTHON_VERSION} | sed 's/\.//g') && \
+    echo "export PYTHON_VERSION_STR=${PYTHON_VERSION_STR}" >> /etc/environment
+
+# Install Python 3.12 first to match the precompiled wheels
+RUN apt-get update && apt-get install -y curl python3.12 python3.12-venv python3.12-dev && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 && \
+    curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
+
+# Uninstall old vllm to avoid version conflict
+RUN /azureml-envs/default/bin/python -m pip uninstall --yes vllm
+
+# CUDA arch list for A100 (Ampere architecture)
+ARG torch_cuda_arch_list='7.0 7.5 8.0 8.6 8.9 9.0+PTX'
+ENV TORCH_CUDA_ARCH_LIST=${torch_cuda_arch_list}
+ARG vllm_fa_cmake_gpu_arches='80-real;90-real'
+ENV VLLM_FA_CMAKE_GPU_ARCHES=${vllm_fa_cmake_gpu_arches}
+
+ENV CCACHE_DIR=/root/.cache/ccache
+RUN python3.12 -m pip install "setuptools_scm==9.2.1"
+
+# Install PyTorch 2.6.0 with CUDA 12.4 support for Python 3.12
+RUN python3.12 -m pip uninstall --yes torch torchvision torchaudio
+RUN python3.12 -m pip install torch==2.6.0
+RUN python3.12 -m pip install torchvision==0.21.0
+RUN python3.12 -m pip install torchaudio==2.6.0
+
+# Install xformers (A100 compatible)
+RUN python3.12 -m pip uninstall --yes xformers
+RUN python3.12 -m pip install xformers --no-deps
+
+# FlashInfer for optimized attention on A100
+RUN python3.12 -m pip install https://github.com/flashinfer-ai/flashinfer/releases/download/v0.2.1.post2/flashinfer_python-0.2.1.post2+cu124torch2.6-cp38-abi3-linux_x86_64.whl
+
+# Install vLLM from precompiled wheel
+COPY .build-wheels/vllm-0.10.2-cp312-cp312-linux_x86_64.whl /tmp/
+RUN python3.12 -m pip install /tmp/vllm-0.10.2-cp312-cp312-linux_x86_64.whl && \
+    rm /tmp/vllm-0.10.2-cp312-cp312-linux_x86_64.whl && \
+    rm -rf /vllm-workspace/vllm /vllm-workspace/setup.py /vllm-workspace/setup.cfg /vllm-workspace/CMakeLists.txt /vllm-workspace/cmake
+
+# CUDA compat workaround
+RUN ldconfig /usr/local/cuda-$(echo $CUDA_VERSION | cut -d. -f1,2)/compat/
+
+# Install extra dependencies
+COPY requirements/extra.txt requirements/extra.txt
+RUN python3.12 -m pip install -r requirements/extra.txt
+
+# ============================================================================
+# xcodec Audio Tokenizer Installation (with all checkpoint-1200 fixes)
+# ============================================================================
+COPY third_party/xcodec /vllm-workspace/third_party/xcodec
+
+# Fix 1: scipy version requirement (1.10.1 doesn't exist, use 1.11.4)
+RUN sed -i 's/scipy==1.10.1/scipy==1.11.4/g' /vllm-workspace/third_party/xcodec/requirements.txt && \
+    sed -i 's/scipy==1.10.1/scipy==1.11.4/g' /vllm-workspace/third_party/xcodec/setup.py
+
+# Fix 2: descript-audio-codec import (package installs as 'dac' not 'descriptaudiocodec')
+RUN sed -i 's/import descriptaudiocodec\.dac\.model\.dac/import dac.model.dac/g' \
+    /vllm-workspace/third_party/xcodec/xcodec/models/soundstream_semantic.py
+
+# Fix 3: Missing __init__.py in semantic directory (needed for package discovery)
+RUN touch /vllm-workspace/third_party/xcodec/xcodec/models/semantic/__init__.py
+
+# Install xcodec
+RUN python3.12 -m pip install /vllm-workspace/third_party/xcodec
+
+# Install custom vLLM with audio support (no-deps to avoid conflicts)
+COPY .build-wheels/vllm-0.1.dev9525+gcc3a60157.d20250930-cp312-cp312-linux_x86_64.whl /tmp/
+RUN python3.12 -m pip install /tmp/vllm-0.1.dev9525+gcc3a60157.d20250930-cp312-cp312-linux_x86_64.whl --no-deps && \
+    rm /tmp/vllm-0.1.dev9525+gcc3a60157.d20250930-cp312-cp312-linux_x86_64.whl
+
+# ============================================================================
+# Model Files (BYOC - embedded in container)
+# IMPORTANT: Resolve symlinks before building! Run:
+#   cd docker && ls -la models/
+#   If symlinked: cp -rL models/... actual/path/
+# ============================================================================
+COPY models/audio-multimodal-checkpoint-1200 /vllm-workspace/models/audio-multimodal-checkpoint-1200
+COPY models/xcodec_tps25_0516_exp_1 /vllm-workspace/models/xcodec_tps25_0516_exp_1
+
+# Additional dependencies
+RUN python3.12 -m pip install "boto3==1.35.57"
+RUN python3.12 -m pip install "botocore==1.40.45"
+
+# ============================================================================
+# Azure AI Foundry MaaP Configuration
+# ============================================================================
+
+# Environment variable for V1 engine (set via deployment template as well)
+ENV VLLM_USE_V1=1
+
+# Expose the vLLM API server port (used in deployment template scoringPort)
+EXPOSE 26000
+
+# Health check for Azure ML liveness/readiness probes
+HEALTHCHECK --interval=30s --timeout=10s --start-period=600s --retries=3 \
+    CMD curl -f http://localhost:26000/health || exit 1
+
+# ============================================================================
+# Entrypoint Configuration for MaaP
+# - Port 26000 (matches scoringPort in deployment template)
+# - Model served as "audio-multimodal" (for inferencePayload compatibility)
+# - Health endpoint at /health (matches livenessProbe/readinessProbe path)
+# - Scoring endpoint at /v1/chat/completions (matches scoringPath)
+# ============================================================================
+ENTRYPOINT ["python3.12", \
+    "-m", "vllm.entrypoints.openai.api_server", \
+    "--port", "26000", \
+    "--model", "/vllm-workspace/models/audio-multimodal-checkpoint-1200", \
+    "--served-model-name", "audio-multimodal", \
+    "--audio-tokenizer-type", "xcodec_0516_exp_1", \
+    "--audio-tokenizer-path", "/vllm-workspace/models/xcodec_tps25_0516_exp_1", \
+    "--max-model-len", "8192", \
+    "--limit-mm-per-prompt", "{\"audio\": 50}", \
+    "--gpu-memory-utilization", "0.8", \
+    "--disable-mm-preprocessor-cache"]

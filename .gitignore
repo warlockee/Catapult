@@ -1,0 +1,46 @@
+# Runtime
+storage/
+docker_logs/
+*.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+*.egg
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage/
+
+# Node
+node_modules/
+
+# Environment
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+agent_logs/
+
+# Large data (clone separately if needed)
+kb/dockers/silero-vad/
+kb/dockers/torch_hub/
+kb/dockers/asr_eval/data/

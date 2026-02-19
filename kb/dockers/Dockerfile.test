@@ -1,0 +1,3 @@
+FROM ubuntu:latest
+RUN echo "Test Build Started"
+CMD ["echo", "Test Build Success"]

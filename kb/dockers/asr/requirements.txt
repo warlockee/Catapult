@@ -1,0 +1,23 @@
+# ASR Docker Requirements
+# These are dependencies for the ASR evaluation and client tools.
+# vLLM and its dependencies are installed separately via the pre-compiled wheel.
+
+# Audio processing
+torch>=2.0.0
+torchaudio>=2.0.0
+soundfile>=0.12.0
+numpy>=1.24.0
+
+# VAD (Silero VAD is loaded via torch.hub)
+# packaging is required by silero-vad
+packaging>=21.0
+
+# Evaluation
+jiwer>=3.0.0
+pyarrow>=14.0.0
+whisper-normalizer>=0.1.0
+
+# API client
+openai>=1.0.0
+requests>=2.28.0
+httpx>=0.24.0

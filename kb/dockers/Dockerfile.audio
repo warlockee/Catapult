@@ -1,0 +1,144 @@
+# =============================================================================
+# Audio Model Docker Image for Model Registry
+# =============================================================================
+# This Dockerfile creates an inference container for audio models (TTS/STT).
+# It uses a FastAPI server instead of vLLM for audio model inference.
+#
+# Build Args:
+#   MODEL_NAME     - Name of the model
+#   BASE_IMAGE     - Base image (default: python:3.11-slim)
+#
+# Environment Variables (runtime configurable):
+#   MODEL_PATH         - Path to model inside container (default: /models/${MODEL_NAME})
+#   PORT               - API server port (default: 8000)
+#   EXTRA_ARGS         - Additional server arguments
+#
+# Usage:
+#   docker build -t audio-model:v1.0 --build-arg MODEL_NAME=step-audio .
+#   docker run --gpus all -p 8000:8000 audio-model:v1.0
+# =============================================================================
+
+ARG BASE_IMAGE=python:3.11-slim
+FROM ${BASE_IMAGE}
+
+# Build arguments
+ARG MODEL_NAME=model
+
+# Set environment variables
+ENV MODEL_NAME=${MODEL_NAME}
+ENV MODEL_PATH=/models/${MODEL_NAME}
+ENV PORT=8000
+ENV PYTHONUNBUFFERED=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create directories
+WORKDIR /app
+RUN mkdir -p /models /tmp/staging
+
+# Copy all staged content from build context
+COPY . /tmp/staging/
+
+# Move model files to /models
+RUN if [ -d "/tmp/staging/models/${MODEL_NAME}" ]; then \
+        mv "/tmp/staging/models/${MODEL_NAME}" "/models/${MODEL_NAME}"; \
+    elif [ -d "/tmp/staging/models" ]; then \
+        mv /tmp/staging/models/* /models/ 2>/dev/null || true; \
+    fi
+
+# Install staged wheel artifacts (custom packages, etc.)
+# Skip dummy_wheel.whl (placeholder file created by workspace service)
+RUN for whl in /tmp/staging/*.whl; do \
+        if [ -f "$whl" ] && [ "$(basename $whl)" != "dummy_wheel.whl" ]; then \
+            echo "Installing wheel: $whl"; \
+            pip install --no-cache-dir --force-reinstall "$whl" || true; \
+        fi; \
+    done
+
+# Install Python requirements if present
+RUN if [ -f "/tmp/staging/requirements/requirements.txt" ]; then \
+        pip install --no-cache-dir -r /tmp/staging/requirements/requirements.txt; \
+    fi
+
+# Install common audio dependencies
+RUN pip install --no-cache-dir \
+    fastapi \
+    uvicorn \
+    python-multipart \
+    pydantic \
+    numpy \
+    scipy \
+    soundfile \
+    torch \
+    torchaudio
+
+# Copy third-party code if present
+RUN if [ -d "/tmp/staging/third_party" ]; then \
+        cp -r /tmp/staging/third_party/* /app/ 2>/dev/null || true; \
+    fi
+
+# Clean up staging
+RUN rm -rf /tmp/staging
+
+# Create a simple FastAPI server for audio inference
+RUN printf '%s\n' \
+'import os' \
+'import logging' \
+'from fastapi import FastAPI, UploadFile, File' \
+'from fastapi.responses import JSONResponse' \
+'from pydantic import BaseModel' \
+'from typing import Optional' \
+'import uvicorn' \
+'' \
+'logging.basicConfig(level=logging.INFO)' \
+'logger = logging.getLogger(__name__)' \
+'app = FastAPI(title="Audio Model API", version="1.0.0")' \
+'MODEL_PATH = os.environ.get("MODEL_PATH", "/models/model")' \
+'MODEL_NAME = os.environ.get("MODEL_NAME", "audio-model")' \
+'' \
+'class TTSRequest(BaseModel):' \
+'    text: str' \
+'    voice: Optional[str] = "default"' \
+'    speed: Optional[float] = 1.0' \
+'' \
+'@app.on_event("startup")' \
+'async def startup():' \
+'    logger.info(f"Loading model from {MODEL_PATH}")' \
+'    logger.info("Model server ready")' \
+'' \
+'@app.get("/health")' \
+'async def health():' \
+'    return {"status": "healthy", "model": MODEL_NAME}' \
+'' \
+'@app.get("/")' \
+'async def root():' \
+'    return {"message": "Audio Model API", "model": MODEL_NAME}' \
+'' \
+'@app.get("/info")' \
+'async def info():' \
+'    return {"model": MODEL_NAME, "model_path": MODEL_PATH, "type": "audio"}' \
+'' \
+'@app.post("/synthesize")' \
+'async def synthesize(request: TTSRequest):' \
+'    return JSONResponse({"status": "placeholder", "text": request.text})' \
+'' \
+'@app.post("/transcribe")' \
+'async def transcribe(audio: UploadFile = File(...)):' \
+'    return JSONResponse({"status": "placeholder", "filename": audio.filename})' \
+'' \
+'if __name__ == "__main__":' \
+'    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))' \
+> /app/server.py
+
+EXPOSE ${PORT}
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
+
+# Run the server
+CMD ["python", "/app/server.py"]

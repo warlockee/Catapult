@@ -1,0 +1,534 @@
+# syntax=docker/dockerfile:1
+# =============================================================================
+# ASR All-in-One Docker Image for Audio Models
+# =============================================================================
+# Complete ASR service: Audio -> VAD -> 4s Cut -> Inference -> Text
+#
+# Uses custom-vllm base with audio model support plus a FastAPI wrapper
+# that handles audio preprocessing (VAD, segmentation) before inference.
+#
+# Build Args:
+#   CUSTOM_VLLM_BASE - Base image with audio model support
+#   MODEL_NAME       - Model directory name in /models
+#
+# API Endpoints:
+#   POST /transcribe       - Upload audio file, get transcription
+#   POST /transcribe/batch - Upload multiple files
+#   GET /health            - Health check
+#
+# =============================================================================
+
+ARG CUSTOM_VLLM_BASE=custom-vllm:v0.10.2-testing
+FROM ${CUSTOM_VLLM_BASE}
+
+ARG MODEL_NAME=model
+ENV MODEL_NAME=${MODEL_NAME}
+
+WORKDIR /workspace
+
+# Copy staged content from build context
+COPY . /tmp/staging/
+
+# Install additional dependencies for VAD preprocessing
+RUN pip install --no-cache-dir \
+    fastapi>=0.100.0 \
+    uvicorn>=0.23.0 \
+    python-multipart>=0.0.6 \
+    soundfile>=0.12.0 \
+    torchaudio>=2.0.0 \
+    packaging>=21.0
+
+# Install extra requirements if present
+RUN if [ -f /tmp/staging/requirements/extra.txt ]; then \
+        pip install --no-cache-dir -r /tmp/staging/requirements/extra.txt; \
+    fi
+
+# Install xcodec if present (for audio generation)
+RUN if [ -d /tmp/staging/third_party/xcodec ]; then \
+        pip install --no-cache-dir -e /tmp/staging/third_party/xcodec --no-deps; \
+    fi
+
+# Move model files to /models
+RUN mkdir -p /models && \
+    if [ -d "/tmp/staging/models/${MODEL_NAME}" ]; then \
+        mv "/tmp/staging/models/${MODEL_NAME}" "/models/${MODEL_NAME}"; \
+    elif [ -d "/tmp/staging/models" ]; then \
+        mv /tmp/staging/models/* /models/ 2>/dev/null || true; \
+    fi
+
+# Pre-cache whisper model for audio processing (required by audio model)
+ENV HF_HOME=/hf_cache
+RUN mkdir -p /hf_cache/hub && \
+    if [ -d "/tmp/staging/hf_cache/models--openai--whisper-large-v3-turbo" ]; then \
+        echo "Using pre-staged whisper model cache"; \
+        mv /tmp/staging/hf_cache/models--openai--whisper-large-v3-turbo /hf_cache/hub/; \
+    else \
+        echo "Downloading whisper model..."; \
+        python3 -c "from huggingface_hub import snapshot_download; snapshot_download('openai/whisper-large-v3-turbo')" || \
+        echo "Warning: Could not download whisper model. Container may require network access at runtime."; \
+    fi
+
+# Pre-cache Silero VAD model for speech detection
+ENV TORCH_HOME=/root/.cache/torch
+RUN mkdir -p /root/.cache/torch/hub && \
+    python3 -c "import torch; torch.hub.load('snakers4/silero-vad', 'silero_vad', trust_repo=True)" && \
+    echo "Silero VAD model cached successfully"
+
+# Cleanup staging
+RUN rm -rf /tmp/staging
+
+# Create app directory and write ASR service files
+RUN mkdir -p /app/asr
+
+# Write the ASR service Python code
+RUN cat > /app/asr/asr_service.py << 'ASRSERVICE'
+"""
+ASR All-in-One Service
+
+Complete ASR pipeline: Audio -> VAD -> 4s Cut -> Inference -> Text
+"""
+import asyncio
+import base64
+import io
+import logging
+import os
+import time
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from typing import Optional
+
+import numpy as np
+import soundfile as sf
+import torch
+import torchaudio
+import uvicorn
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
+
+# Configuration
+VLLM_URL = os.getenv("VLLM_URL", "http://localhost:26007/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "asr-model")
+SAMPLE_RATE = 16000
+CHUNK_SAMPLES = 64000  # 4 seconds at 16kHz
+MAX_CHUNKS_PER_REQUEST = 4  # Match tools eval: max 4 chunks (~16s) per API call
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class VADConfig:
+    """Silero VAD configuration matching reference implementation."""
+    threshold: float = 0.55
+    min_speech_duration_ms: int = 125
+    min_silence_duration_ms: int = 200
+    speech_pad_ms: int = 300
+
+
+# Global state
+vad_model = None
+get_speech_timestamps = None
+openai_client = None
+
+
+def load_vad():
+    """Load Silero VAD model from local cache."""
+    global vad_model, get_speech_timestamps
+    if vad_model is None:
+        logger.info("Loading Silero VAD model...")
+        # Use cached path directly to avoid network access
+        cache_path = "/root/.cache/torch/hub/snakers4_silero-vad_master"
+        model, utils = torch.hub.load(
+            repo_or_dir=cache_path,
+            model="silero_vad",
+            trust_repo=True,
+            source='local',
+        )
+        vad_model = model
+        get_speech_timestamps = utils[0]
+        logger.info("VAD model loaded")
+    return vad_model, get_speech_timestamps
+
+
+def init_openai_client():
+    """Initialize OpenAI client for vLLM."""
+    global openai_client
+    if openai_client is None:
+        import openai
+        openai_client = openai.OpenAI(
+            base_url=VLLM_URL,
+            api_key="not-needed",
+        )
+        logger.info(f"OpenAI client initialized: {VLLM_URL}")
+    return openai_client
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize models on startup."""
+    load_vad()
+    init_openai_client()
+    yield
+
+
+app = FastAPI(
+    title="ASR Service",
+    description="All-in-one ASR: Audio -> VAD -> 4s Cut -> Inference -> Text",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+
+def load_audio(audio_bytes: bytes) -> np.ndarray:
+    """Load audio from bytes, resample to 16kHz mono."""
+    buf = io.BytesIO(audio_bytes)
+    try:
+        audio, sr = sf.read(buf)
+    except Exception:
+        buf.seek(0)
+        wav, sr = torchaudio.load(buf)
+        audio = wav.numpy()
+        if len(audio.shape) > 1:
+            audio = audio.mean(axis=0)
+
+    if len(audio.shape) > 1:
+        audio = audio.mean(axis=1)
+
+    if sr != SAMPLE_RATE:
+        wav_tensor = torch.from_numpy(audio).float().unsqueeze(0)
+        resampler = torchaudio.transforms.Resample(orig_freq=sr, new_freq=SAMPLE_RATE)
+        audio = resampler(wav_tensor).squeeze(0).numpy()
+
+    return audio.astype(np.float32)
+
+
+def segment_audio(audio: np.ndarray, vad_config: VADConfig) -> list:
+    """Run VAD and segment audio into <=4s chunks."""
+    model, get_ts = load_vad()
+
+    wav_tensor = torch.from_numpy(audio).float()
+    timestamps = get_ts(
+        wav_tensor,
+        model,
+        sampling_rate=SAMPLE_RATE,
+        threshold=vad_config.threshold,
+        min_speech_duration_ms=vad_config.min_speech_duration_ms,
+        min_silence_duration_ms=vad_config.min_silence_duration_ms,
+        speech_pad_ms=vad_config.speech_pad_ms,
+    )
+
+    if not timestamps:
+        timestamps = [{"start": 0, "end": len(audio)}]
+
+    segments = []
+    for ts in timestamps:
+        seg = audio[ts["start"]:ts["end"]]
+        if len(seg) > CHUNK_SAMPLES:
+            for i in range(0, len(seg), CHUNK_SAMPLES):
+                chunk = seg[i:i + CHUNK_SAMPLES]
+                if len(chunk) > 0:
+                    segments.append(chunk)
+        else:
+            segments.append(seg)
+
+    return segments
+
+
+def encode_segment(segment: np.ndarray) -> str:
+    """Encode audio segment as base64 WAV."""
+    buf = io.BytesIO()
+    sf.write(buf, segment, SAMPLE_RATE, format="WAV")
+    buf.seek(0)
+    return base64.b64encode(buf.read()).decode("utf-8")
+
+
+def _call_vllm(b64_chunks: list, language: str = "English") -> str:
+    """Send a batch of audio chunks to vLLM."""
+    client = init_openai_client()
+
+    if language.lower() == "auto":
+        user_text = "Your task is to listen to audio input and output the exact spoken words as plain text."
+    else:
+        user_text = f"Your task is to listen to audio input and output the exact spoken words as plain text in {language}."
+
+    content = [{"type": "text", "text": user_text}]
+    for i, chunk in enumerate(b64_chunks):
+        content.append({
+            "type": "audio_url",
+            "audio_url": {"url": f"data:audio/wav_{i};base64,{chunk}"}
+        })
+
+    messages = [
+        {"role": "system", "content": "You are an automatic speech recognition (ASR) system."},
+        {"role": "user", "content": content}
+    ]
+
+    response = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=messages,
+        max_completion_tokens=256,
+        temperature=0.0,
+        stop=["<|eot_id|>", "<|endoftext|>", "<|audio_eos|>", "<|im_end|>"],
+        extra_body={"skip_special_tokens": False, "repetition_penalty": 1.1},
+    )
+
+    return response.choices[0].message.content
+
+
+def transcribe_segments(segments: list, language: str = "English") -> str:
+    """Send segments to vLLM and get transcription."""
+    if not segments:
+        return ""
+
+    b64_chunks = [encode_segment(seg) for seg in segments]
+
+    if len(b64_chunks) <= MAX_CHUNKS_PER_REQUEST:
+        return _call_vllm(b64_chunks, language).strip()
+
+    parts = []
+    for start in range(0, len(b64_chunks), MAX_CHUNKS_PER_REQUEST):
+        batch = b64_chunks[start:start + MAX_CHUNKS_PER_REQUEST]
+        text = _call_vllm(batch, language)
+        if text:
+            parts.append(text.strip())
+    return " ".join(parts)
+
+
+@app.get("/health")
+async def health():
+    """Health check endpoint."""
+    return {"status": "healthy", "model": MODEL_NAME, "vllm_url": VLLM_URL}
+
+
+@app.post("/transcribe")
+async def transcribe(
+    file: UploadFile = File(...),
+    language: str = Form(default="English"),
+):
+    """Transcribe audio file."""
+    start_time = time.time()
+
+    try:
+        audio_bytes = await file.read()
+        audio = load_audio(audio_bytes)
+        audio_duration = len(audio) / SAMPLE_RATE
+
+        vad_config = VADConfig()
+        segments = segment_audio(audio, vad_config)
+        transcription = transcribe_segments(segments, language)
+
+        elapsed = time.time() - start_time
+
+        return JSONResponse({
+            "transcription": transcription,
+            "language": language,
+            "audio_duration_seconds": round(audio_duration, 2),
+            "num_segments": len(segments),
+            "processing_time_seconds": round(elapsed, 2),
+            "realtime_factor": round(audio_duration / elapsed, 2) if elapsed > 0 else 0,
+        })
+
+    except Exception as e:
+        logger.exception("Transcription failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/transcribe/batch")
+async def transcribe_batch(
+    files: list = File(...),
+    language: str = Form(default="English"),
+):
+    """Transcribe multiple audio files."""
+    results = []
+    for f in files:
+        try:
+            audio_bytes = await f.read()
+            audio = load_audio(audio_bytes)
+            segments = segment_audio(audio, VADConfig())
+            transcription = transcribe_segments(segments, language)
+            results.append({
+                "filename": f.filename,
+                "transcription": transcription,
+                "status": "success",
+            })
+        except Exception as e:
+            results.append({
+                "filename": f.filename,
+                "transcription": None,
+                "status": "error",
+                "error": str(e),
+            })
+
+    return JSONResponse({"results": results})
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="ASR Service")
+    parser.add_argument("--host", default="0.0.0.0", help="Host to bind")
+    parser.add_argument("--port", type=int, default=8000, help="Port to bind")
+    parser.add_argument("--vllm-url", default="http://localhost:26007/v1", help="vLLM URL")
+    parser.add_argument("--model", default="asr-model", help="Model name")
+    args = parser.parse_args()
+
+    os.environ["VLLM_URL"] = args.vllm_url
+    os.environ["MODEL_NAME"] = args.model
+
+    uvicorn.run(app, host=args.host, port=args.port)
+ASRSERVICE
+
+# Write the entrypoint script
+RUN cat > /app/asr/entrypoint.sh << 'ENTRYPOINT'
+#!/bin/bash
+# ASR All-in-One Entrypoint - starts vLLM + ASR service
+
+set -e
+
+# Defaults
+MODEL_PATH=""
+MODEL_NAME="asr-model"
+VLLM_PORT=26007
+API_PORT=8000
+MAX_MODEL_LEN=4096
+MAX_NUM_SEQS=100
+GPU_MEMORY_UTILIZATION=0.85
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --model)
+            MODEL_PATH="$2"
+            shift 2
+            ;;
+        --model-name)
+            MODEL_NAME="$2"
+            shift 2
+            ;;
+        --vllm-port)
+            VLLM_PORT="$2"
+            shift 2
+            ;;
+        --api-port)
+            API_PORT="$2"
+            shift 2
+            ;;
+        --max-model-len)
+            MAX_MODEL_LEN="$2"
+            shift 2
+            ;;
+        --max-num-seqs)
+            MAX_NUM_SEQS="$2"
+            shift 2
+            ;;
+        --gpu-memory-utilization)
+            GPU_MEMORY_UTILIZATION="$2"
+            shift 2
+            ;;
+        -h|--help)
+            echo "Usage: entrypoint.sh --model <path> [OPTIONS]"
+            echo "Options:"
+            echo "  --model PATH          Path to model (required)"
+            echo "  --model-name NAME     Served model name (default: asr-model)"
+            echo "  --vllm-port PORT      vLLM internal port (default: 26007)"
+            echo "  --api-port PORT       ASR API port (default: 8000)"
+            echo "  --max-model-len N     Max model length (default: 4096)"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+# If no model path specified, find model in /models
+if [ -z "$MODEL_PATH" ]; then
+    if [ -d "/models/${MODEL_NAME}" ]; then
+        MODEL_PATH="/models/${MODEL_NAME}"
+    else
+        MODEL_PATH=$(find /models -mindepth 1 -maxdepth 1 -type d | head -1)
+    fi
+fi
+
+if [ -z "$MODEL_PATH" ] || [ ! -d "$MODEL_PATH" ]; then
+    echo "Error: Model path not found. Use --model or ensure model is in /models/"
+    exit 1
+fi
+
+echo "=============================================="
+echo "ASR All-in-One Service"
+echo "=============================================="
+echo "Model: $MODEL_PATH"
+echo "Model name: $MODEL_NAME"
+echo "vLLM port: $VLLM_PORT (internal)"
+echo "API port: $API_PORT (external)"
+echo "Max model length: $MAX_MODEL_LEN"
+echo "=============================================="
+
+# Start vLLM server in background
+echo "Starting vLLM server..."
+python3 -m vllm.entrypoints.openai.api_server \
+    --served-model-name "$MODEL_NAME" \
+    --model "$MODEL_PATH" \
+    --port "$VLLM_PORT" \
+    --trust-remote-code \
+    --max-num-seqs "$MAX_NUM_SEQS" \
+    --max-model-len "$MAX_MODEL_LEN" \
+    --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
+    &
+
+VLLM_PID=$!
+
+# Wait for vLLM to be ready
+echo "Waiting for vLLM to be ready..."
+for i in {1..120}; do
+    if curl -s "http://localhost:$VLLM_PORT/v1/models" > /dev/null 2>&1; then
+        echo "vLLM is ready!"
+        break
+    fi
+    if ! kill -0 $VLLM_PID 2>/dev/null; then
+        echo "Error: vLLM process died"
+        exit 1
+    fi
+    sleep 1
+done
+
+if ! curl -s "http://localhost:$VLLM_PORT/v1/models" > /dev/null 2>&1; then
+    echo "Error: vLLM failed to start within 120 seconds"
+    exit 1
+fi
+
+# Start ASR service
+echo "Starting ASR service on port $API_PORT..."
+export VLLM_URL="http://localhost:$VLLM_PORT/v1"
+export MODEL_NAME="$MODEL_NAME"
+
+python3 /app/asr/asr_service.py \
+    --host 0.0.0.0 \
+    --port "$API_PORT" \
+    --vllm-url "http://localhost:$VLLM_PORT/v1" \
+    --model "$MODEL_NAME"
+ENTRYPOINT
+
+RUN chmod +x /app/asr/entrypoint.sh
+
+# Runtime configuration
+ENV PORT=8000
+ENV VLLM_PORT=26007
+ENV GPU_MEMORY_UTIL=0.85
+ENV TENSOR_PARALLEL=1
+ENV MAX_MODEL_LEN=4096
+ENV MAX_NUM_SEQS=100
+ENV HF_HOME=/hf_cache
+ENV HF_HUB_OFFLINE=1
+
+# Health check (checks external API port)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
+
+# Expose ports: 8000 for ASR API, 26007 for internal vLLM (optional external access)
+EXPOSE ${PORT} ${VLLM_PORT}
+
+# Use entrypoint script
+ENTRYPOINT ["/app/asr/entrypoint.sh"]

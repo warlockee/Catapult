@@ -1,0 +1,207 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: catapult-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-registry}
+      POSTGRES_USER: ${POSTGRES_USER:-registry}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=en_US.UTF-8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    network_mode: host
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-registry}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+      network: host
+    container_name: catapult-backend
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      # Database (use localhost since we're on host network)
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-registry}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB:-registry}
+
+      # Application
+      APP_NAME: "Model Registry"
+      APP_VERSION: "1.0.0"
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DEBUG: ${DEBUG:-false}
+
+      # Security
+      API_KEY_SALT: ${API_KEY_SALT}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost,http://localhost:8080}
+
+      # Storage
+      CEPH_MOUNT_PATH: /fsx
+      LOCAL_STORAGE_PATH: /data/local
+      MODEL_STORAGE_DIR: ${MODEL_STORAGE_DIR}
+
+      # Limits
+      MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-1073741824}
+
+      # Redis (use localhost since we're on host network)
+      REDIS_URL: redis://localhost:6379/0
+
+      # Docker API version compatibility
+      DOCKER_API_VERSION: "1.43"
+    volumes:
+      # Storage mount (configure your Ceph or use local directory)
+      - ${CEPH_HOST_PATH:-./storage}:${CEPH_CONTAINER_PATH:-/data/ceph}:rw
+      - ${ARTIFACT_HOST_PATH:-./storage/artifacts}:/data/artifacts:rw
+      - ${DOCKER_JOBS_HOST_PATH:-./storage/dockerbuild_jobs}:/fsx/dockerbuild_jobs:rw
+      - ${ARTIFACT_HOST_PATH:-./storage/artifacts}:/ceph/artifacts:rw
+      - ${STORAGE_ROOT:-./storage}:/fsx:rw
+      # Models mount (configurable, defaults to local storage)
+      - ${MODELS_PATH:-./storage/models}:/fsx/models:ro
+      # vLLM prebuilt wheels (read-only artifact source)
+      - ${WORKSPACE_PATH:-./storage/workspace}/vllm_wheels_prebuilt:/fsx/vllm_wheels_prebuilt:ro
+      # User workspace files (read-only, for registering existing artifacts)
+      - ${WORKSPACE_PATH:-./storage/workspace}:/fsx/workspace:ro
+      # Local storage for temporary files
+      - backend_storage:/data/local
+      - docker_logs:/tmp/docker_builds
+      # Note: docker_logs are at /fsx/docker_logs via STORAGE_ROOT mount
+      # Code Mount
+      - ./backend:/app
+      # Docker templates
+      - ./kb/dockers:/app/kb/dockers:ro
+      # Docker socket for container logs and health checks
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # React Frontend (Build stage)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: builder
+      network: host
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api}
+        VITE_DEFAULT_API_KEY: admin.admin
+    container_name: catapult-frontend-builder
+    command: sh -c "cp -r /app/build/* /output/ && echo 'Frontend built and copied'"
+    volumes:
+      - frontend_build:/output
+
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: catapult-nginx
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d:ro
+      - frontend_build:/usr/share/nginx/html:ro
+      # SSL certificates (if using HTTPS)
+      - ./infrastructure/nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+      - frontend
+
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: catapult-redis
+    restart: unless-stopped
+    network_mode: host
+
+  # Celery Worker
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+      network: host
+    container_name: catapult-worker
+    command: celery -A app.core.celery_app worker --loglevel=info
+    user: root
+    restart: unless-stopped
+    network_mode: host  # Use host network for external endpoint access (benchmarks)
+    environment:
+      # Database (use localhost since we're on host network)
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-registry}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB:-registry}
+
+      # Redis (use localhost since we're on host network)
+      REDIS_URL: redis://localhost:6379/0
+
+      # Application
+      APP_NAME: "Model Registry Worker"
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      API_KEY_SALT: ${API_KEY_SALT}
+
+      # Docker API version compatibility
+      DOCKER_API_VERSION: "1.43"
+
+      # Storage - must match backend's CEPH_MOUNT_PATH for consistent path resolution
+      CEPH_MOUNT_PATH: /fsx
+      LOCAL_STORAGE_PATH: /data/local
+      MODEL_STORAGE_DIR: ${MODEL_STORAGE_DIR}
+    volumes:
+      # Storage mount
+      - ${CEPH_HOST_PATH:-./storage}:${CEPH_CONTAINER_PATH:-/data/ceph}:rw
+      - ${ARTIFACT_HOST_PATH:-./storage/artifacts}:/data/artifacts:rw
+      - ${DOCKER_JOBS_HOST_PATH:-./storage/dockerbuild_jobs}:/fsx/dockerbuild_jobs:rw
+      - ${ARTIFACT_HOST_PATH:-./storage/artifacts}:/ceph/artifacts:rw
+      - ${STORAGE_ROOT:-./storage}:/fsx:rw
+      # Models mount (configurable, defaults to local storage)
+      - ${MODELS_PATH:-./storage/models}:/fsx/models:ro
+      # vLLM prebuilt wheels (read-only artifact source)
+      - ${WORKSPACE_PATH:-./storage/workspace}/vllm_wheels_prebuilt:/fsx/vllm_wheels_prebuilt:ro
+      # User workspace files (read-only, for registering existing artifacts)
+      - ${WORKSPACE_PATH:-./storage/workspace}:/fsx/workspace:ro
+      # ASR evaluation datasets
+      - /fsx/data:/fsx/data:ro
+      # HuggingFace cache for offline ASR builds
+      - /fsx/hf_cache:/fsx/hf_cache:ro
+      # Docker socket for building images
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Shared logs
+      - docker_logs:/tmp/docker_builds
+      # Code mount
+      - ./backend:/app
+      # Docker templates (same as backend)
+      - ./kb/dockers:/app/kb/dockers:ro
+      # SSH keys for Git access (ASR-vLLM builds clone from GitHub)
+      - /root/.ssh:/root/.ssh:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+volumes:
+  postgres_data:
+    driver: local
+  backend_storage:
+    driver: local
+  frontend_build:
+  docker_logs:
+    driver: local

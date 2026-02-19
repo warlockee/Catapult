@@ -1,0 +1,142 @@
+# =============================================================================
+# Generic Docker Image for Model Registry
+# =============================================================================
+# This Dockerfile creates a generic inference container for any model type.
+# Provides a minimal FastAPI server with model loading capabilities.
+#
+# Build Args:
+#   MODEL_NAME     - Name of the model
+#   BASE_IMAGE     - Base image (default: nvidia/cuda with Python)
+#
+# Environment Variables (runtime configurable):
+#   MODEL_PATH         - Path to model inside container (default: /models/${MODEL_NAME})
+#   PORT               - API server port (default: 8000)
+#
+# Usage:
+#   docker build -t model:v1.0 --build-arg MODEL_NAME=my-model .
+#   docker run --gpus all -p 8000:8000 model:v1.0
+# =============================================================================
+
+ARG BASE_IMAGE=nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+FROM ${BASE_IMAGE}
+
+ARG MODEL_NAME=model
+
+ENV MODEL_NAME=${MODEL_NAME}
+ENV MODEL_PATH=/models/${MODEL_NAME}
+ENV PORT=8000
+ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.10 python3-pip python3.10-dev git curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3.10 /usr/bin/python3 \
+    && ln -sf /usr/bin/python3 /usr/bin/python
+
+RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
+
+WORKDIR /app
+RUN mkdir -p /models /tmp/staging
+
+COPY . /tmp/staging/
+
+RUN if [ -d "/tmp/staging/models/${MODEL_NAME}" ]; then \
+        mv "/tmp/staging/models/${MODEL_NAME}" "/models/${MODEL_NAME}"; \
+    elif [ -d "/tmp/staging/models" ]; then \
+        mv /tmp/staging/models/* /models/ 2>/dev/null || true; \
+    fi
+
+# Install staged wheel artifacts (custom packages, etc.)
+# Skip dummy_wheel.whl (placeholder file created by workspace service)
+RUN for whl in /tmp/staging/*.whl; do \
+        if [ -f "$whl" ] && [ "$(basename $whl)" != "dummy_wheel.whl" ]; then \
+            echo "Installing wheel: $whl"; \
+            pip install --no-cache-dir --force-reinstall "$whl" || true; \
+        fi; \
+    done
+
+RUN if [ -f "/tmp/staging/requirements/requirements.txt" ]; then \
+        pip install --no-cache-dir -r /tmp/staging/requirements/requirements.txt; \
+    fi
+
+RUN pip install --no-cache-dir \
+    torch==2.3.0 transformers>=4.49.0 \
+    fastapi uvicorn[standard] pydantic numpy safetensors accelerate
+
+RUN if [ -d "/tmp/staging/third_party" ]; then \
+        cp -r /tmp/staging/third_party/* /app/ 2>/dev/null || true; \
+    fi
+
+RUN rm -rf /tmp/staging
+
+# Create the inference server
+RUN echo 'import os' > /app/server.py && \
+    echo 'import logging' >> /app/server.py && \
+    echo 'from typing import Optional, Any, Dict' >> /app/server.py && \
+    echo 'import torch' >> /app/server.py && \
+    echo 'from fastapi import FastAPI' >> /app/server.py && \
+    echo 'from fastapi.responses import JSONResponse' >> /app/server.py && \
+    echo 'from fastapi.middleware.cors import CORSMiddleware' >> /app/server.py && \
+    echo 'from pydantic import BaseModel' >> /app/server.py && \
+    echo '' >> /app/server.py && \
+    echo 'logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")' >> /app/server.py && \
+    echo 'logger = logging.getLogger(__name__)' >> /app/server.py && \
+    echo '' >> /app/server.py && \
+    echo 'app = FastAPI(title="Generic Model API", version="1.0.0")' >> /app/server.py && \
+    echo 'app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])' >> /app/server.py && \
+    echo '' >> /app/server.py && \
+    echo 'MODEL_PATH = os.environ.get("MODEL_PATH", "/models/model")' >> /app/server.py && \
+    echo 'MODEL_NAME = os.environ.get("MODEL_NAME", "generic-model")' >> /app/server.py && \
+    echo 'device = "cuda" if torch.cuda.is_available() else "cpu"' >> /app/server.py && \
+    echo 'model = None' >> /app/server.py && \
+    echo '' >> /app/server.py && \
+    echo 'class InferenceRequest(BaseModel):' >> /app/server.py && \
+    echo '    input: Any' >> /app/server.py && \
+    echo '    parameters: Optional[Dict[str, Any]] = None' >> /app/server.py && \
+    echo '' >> /app/server.py && \
+    echo '@app.on_event("startup")' >> /app/server.py && \
+    echo 'async def startup():' >> /app/server.py && \
+    echo '    global model' >> /app/server.py && \
+    echo '    logger.info(f"Starting Generic server for {MODEL_NAME}")' >> /app/server.py && \
+    echo '    try:' >> /app/server.py && \
+    echo '        from transformers import AutoModel' >> /app/server.py && \
+    echo '        model = AutoModel.from_pretrained(MODEL_PATH, trust_remote_code=True, device_map="auto")' >> /app/server.py && \
+    echo '        logger.info("Model loaded successfully")' >> /app/server.py && \
+    echo '    except Exception as e:' >> /app/server.py && \
+    echo '        logger.warning(f"Could not load model: {e}")' >> /app/server.py && \
+    echo '    logger.info("Generic server ready")' >> /app/server.py && \
+    echo '' >> /app/server.py && \
+    echo '@app.get("/health")' >> /app/server.py && \
+    echo 'async def health():' >> /app/server.py && \
+    echo '    return {"status": "healthy", "model": MODEL_NAME, "device": device}' >> /app/server.py && \
+    echo '' >> /app/server.py && \
+    echo '@app.get("/")' >> /app/server.py && \
+    echo 'async def root():' >> /app/server.py && \
+    echo '    return {"message": "Generic Model API", "model": MODEL_NAME}' >> /app/server.py && \
+    echo '' >> /app/server.py && \
+    echo '@app.get("/v1/models")' >> /app/server.py && \
+    echo 'async def list_models():' >> /app/server.py && \
+    echo '    return {"object": "list", "data": [{"id": MODEL_NAME, "type": "generic"}]}' >> /app/server.py && \
+    echo '' >> /app/server.py && \
+    echo '@app.post("/v1/inference")' >> /app/server.py && \
+    echo 'async def inference(request: InferenceRequest):' >> /app/server.py && \
+    echo '    if model is None:' >> /app/server.py && \
+    echo '        return JSONResponse(status_code=503, content={"error": "Model not loaded"})' >> /app/server.py && \
+    echo '    try:' >> /app/server.py && \
+    echo '        return {"result": "Inference endpoint - implement based on model type", "model": MODEL_NAME}' >> /app/server.py && \
+    echo '    except Exception as e:' >> /app/server.py && \
+    echo '        logger.error(f"Inference error: {e}")' >> /app/server.py && \
+    echo '        return JSONResponse(status_code=500, content={"error": str(e)})' >> /app/server.py && \
+    echo '' >> /app/server.py && \
+    echo 'if __name__ == "__main__":' >> /app/server.py && \
+    echo '    import uvicorn' >> /app/server.py && \
+    echo '    port = int(os.environ.get("PORT", 8000))' >> /app/server.py && \
+    echo '    uvicorn.run(app, host="0.0.0.0", port=port)' >> /app/server.py
+
+EXPOSE ${PORT}
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
+
+CMD ["python", "/app/server.py"]
