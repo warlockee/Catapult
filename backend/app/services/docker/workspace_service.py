@@ -7,11 +7,11 @@ Handles:
 - Model file copying
 - Requirements and third-party dependencies
 """
+import logging
 import os
 import shutil
-import logging
-from typing import List, Optional
 from dataclasses import dataclass, field
+from typing import List, Optional
 
 from app.core.config import settings
 
@@ -106,7 +106,7 @@ class BuildWorkspaceService:
 
         # Create dummy wheel to satisfy Dockerfile COPY logic
         dummy_wheel = os.path.join(build_dir, "dummy_wheel.whl")
-        with open(dummy_wheel, "w") as f:
+        with open(dummy_wheel, "w"):
             pass
 
         logger.info(f"Created build workspace: {build_dir}")
@@ -223,7 +223,7 @@ class BuildWorkspaceService:
                 if os.path.exists(reqs_dest):
                     shutil.rmtree(reqs_dest)
                 shutil.copytree(reqs_src, reqs_dest)
-                logger.info(f"Staged requirements from model source")
+                logger.info("Staged requirements from model source")
                 return
 
         # Fallback to shared location
@@ -232,7 +232,7 @@ class BuildWorkspaceService:
             if os.path.exists(reqs_dest):
                 shutil.rmtree(reqs_dest)
             shutil.copytree(fallback_src, reqs_dest)
-            logger.info(f"Staged requirements from shared location")
+            logger.info("Staged requirements from shared location")
         else:
             logger.warning("Requirements directory not found")
 
@@ -259,7 +259,7 @@ class BuildWorkspaceService:
                 if os.path.exists(tp_dest):
                     shutil.rmtree(tp_dest)
                 shutil.copytree(tp_src, tp_dest)
-                logger.info(f"Staged third_party from model source")
+                logger.info("Staged third_party from model source")
                 return
 
         # Fallback to shared location
@@ -268,7 +268,7 @@ class BuildWorkspaceService:
             if os.path.exists(tp_dest):
                 shutil.rmtree(tp_dest)
             shutil.copytree(fallback_src, tp_dest)
-            logger.info(f"Staged third_party from shared location")
+            logger.info("Staged third_party from shared location")
         else:
             logger.warning("third_party directory not found")
 

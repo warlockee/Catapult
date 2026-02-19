@@ -33,20 +33,19 @@ Then add to this file:
 from app.services.eval.llm import LLMDockerEvaluator
 ```
 """
-from app.services.eval.base import (
-    Evaluator,
-    EvaluationConfig,
-    EvaluationResult,
-    EvaluationMetrics,
-    ProgressCallback,
-)
-from app.services.eval.docker_base import DockerEvaluator
-from app.services.eval.factory import EvaluatorFactory, register_evaluator, add_type_alias
-from app.services.eval.evaluation_service import EvaluationService, evaluation_service
-
 # Import evaluators to trigger registration
 # Add new evaluators here
 from app.services.eval.asr import ASRDockerEvaluator
+from app.services.eval.base import (
+    EvaluationConfig,
+    EvaluationMetrics,
+    EvaluationResult,
+    Evaluator,
+    ProgressCallback,
+)
+from app.services.eval.docker_base import DockerEvaluator
+from app.services.eval.evaluation_service import EvaluationService, evaluation_service
+from app.services.eval.factory import EvaluatorFactory, add_type_alias, register_evaluator
 
 __all__ = [
     # Base classes

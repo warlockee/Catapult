@@ -1,19 +1,16 @@
-import os
 import hashlib
 import logging
-import uuid
+import os
 from pathlib import Path
-from typing import Optional
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import async_session_maker
+from app.models.artifact import Artifact
 from app.models.model import Model
 from app.models.release import Release
-from app.models.artifact import Artifact
-from app.services.storage_service import storage_service
 from app.services.deployment_sync_service import deployment_sync_service
 
 logger = logging.getLogger(__name__)

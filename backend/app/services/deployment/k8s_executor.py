@@ -11,10 +11,10 @@ from typing import AsyncIterator
 from uuid import UUID
 
 from app.services.deployment.executor_base import (
-    DeploymentExecutor,
-    DeploymentConfig,
-    DeploymentResult,
     ContainerStatus,
+    DeploymentConfig,
+    DeploymentExecutor,
+    DeploymentResult,
 )
 
 

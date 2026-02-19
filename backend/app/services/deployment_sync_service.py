@@ -15,16 +15,14 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
-from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.deployment import Deployment
-from app.models.release import Release
 from app.models.model import Model
+from app.models.release import Release
 
 logger = logging.getLogger(__name__)
 

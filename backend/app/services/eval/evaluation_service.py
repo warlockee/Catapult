@@ -7,7 +7,7 @@ This is the main entry point for running evaluations. It:
 """
 import logging
 from datetime import datetime
-from typing import Optional, Callable, Awaitable
+from typing import Awaitable, Callable, Optional
 from uuid import UUID
 
 from sqlalchemy import select

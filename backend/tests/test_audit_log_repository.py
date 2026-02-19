@@ -1,10 +1,11 @@
 """
 Tests for AuditLogRepository.
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
 from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
+
+import pytest
 
 from app.repositories.audit_log_repository import AuditLogRepository
 

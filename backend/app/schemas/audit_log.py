@@ -2,14 +2,12 @@
 Pydantic schemas for Audit Log.
 """
 from datetime import datetime
-from typing import Optional, Dict, Any
-from pydantic import BaseModel, Field
+from ipaddress import IPv4Address, IPv6Address
+from typing import Any, Dict, Optional, Union
 from uuid import UUID
 
+from pydantic import BaseModel, Field
 
-
-from ipaddress import IPv4Address, IPv6Address
-from typing import Union
 
 class AuditLogResponse(BaseModel):
     """Schema for Audit Log response."""

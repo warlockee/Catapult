@@ -6,9 +6,10 @@ TERMINOLOGY:
     - Release: A promoted/verified version (is_release=true)
 """
 from datetime import datetime
-from typing import Optional, Dict, Any
-from pydantic import BaseModel, Field
+from typing import Any, Dict, Optional
 from uuid import UUID
+
+from pydantic import BaseModel, Field
 
 
 class VersionBase(BaseModel):

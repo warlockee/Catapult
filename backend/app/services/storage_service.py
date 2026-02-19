@@ -2,9 +2,9 @@
 Service for Ceph storage handling.
 """
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
-from datetime import datetime
 
 from app.core.config import settings
 

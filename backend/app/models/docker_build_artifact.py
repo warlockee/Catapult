@@ -3,7 +3,8 @@ Junction table for Docker Build to Artifact many-to-many relationship.
 This replaces the denormalized artifact_ids ARRAY column.
 """
 import uuid
-from sqlalchemy import Column, ForeignKey, DateTime
+
+from sqlalchemy import Column, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 

@@ -7,28 +7,29 @@ This service coordinates Docker builds using decomposed sub-services:
 - BuildExecutorService: Docker command execution
 - BuildArchiveService: Build job archiving
 """
+import logging
 import os
 import re
 import uuid
-import logging
 from datetime import datetime
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.models.docker_build import DockerBuild
-from app.models.docker_build_artifact import DockerBuildArtifact
-from app.models.release import Release
-from app.models.artifact import Artifact
-from app.models.model import Model
 from app.core.config import settings
 from app.core.database import async_session_maker
 from app.core.exceptions import InvalidImageTagError
+from app.models.artifact import Artifact
+from app.models.docker_build import DockerBuild
+from app.models.docker_build_artifact import DockerBuildArtifact
+from app.models.model import Model
+from app.models.release import Release
+from app.services.docker.archive_service import BuildArchiveService
 
 # Import decomposed services
-from app.services.docker.dockerfile_service import DockerfileService, DockerfileConfig
+from app.services.docker.dockerfile_service import DockerfileConfig, DockerfileService
+from app.services.docker.executor_service import BuildCommand, BuildExecutorService
 from app.services.docker.workspace_service import BuildWorkspaceService, normalize_ceph_path
-from app.services.docker.executor_service import BuildExecutorService, BuildCommand
-from app.services.docker.archive_service import BuildArchiveService
 
 logger = logging.getLogger(__name__)
 
@@ -412,8 +413,9 @@ class DockerService:
         Returns:
             BuildResult with success status
         """
-        import subprocess
         import shutil
+        import subprocess
+
         from app.services.docker.executor_service import BuildResult
 
         log_progress("\n🔨 Starting ASR vLLM build (using custom vLLM fork)...\n")

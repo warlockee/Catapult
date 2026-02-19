@@ -7,18 +7,18 @@ import io
 import logging
 import re
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import httpx
 
 from app.services.eval.base import (
-    Evaluator,
     EvaluationConfig,
-    EvaluationResult,
     EvaluationMetrics,
+    EvaluationResult,
+    Evaluator,
     ProgressCallback,
 )
 from app.services.eval.factory import register_evaluator
