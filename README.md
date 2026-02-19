@@ -1,5 +1,8 @@
 # Catapult
 
+[![CI](https://github.com/warlockee/Catapult/actions/workflows/ci.yml/badge.svg)](https://github.com/warlockee/Catapult/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
 **Ship models to production, not just track them.**
 
 Register models, build Docker images, deploy with GPU awareness, benchmark latency, evaluate quality — one platform, one command.
@@ -45,14 +48,12 @@ cd Catapult
 # → API at http://localhost:8080/api
 ```
 
-Starts PostgreSQL, Redis, FastAPI backend, Celery worker, React frontend, and Nginx. Creates an admin API key on first run.
+Starts PostgreSQL, Redis, FastAPI backend, Celery worker, React frontend, and Nginx. Creates an admin API key on first run. API docs at [localhost:8080/docs](http://localhost:8080/docs).
 
 ### Python SDK
 
 ```bash
-pip install catapult-sdk          # from PyPI (when published)
-# or
-cd sdk/python && pip install -e . # from source
+cd sdk/python && pip install -e .
 ```
 
 ### MCP Server (for Claude / AI assistants)
@@ -67,7 +68,7 @@ Add to your MCP config (`claude_desktop_config.json` or `.mcp.json`):
 {
   "mcpServers": {
     "catapult": {
-      "command": "model-registry-mcp",
+      "command": "catapult-mcp",
       "env": {
         "REGISTRY_URL": "http://localhost:8080/api",
         "REGISTRY_API_KEY": "your-api-key"
@@ -213,7 +214,7 @@ FastAPI + async SQLAlchemy · React 18 + Shadcn/ui · Celery + Docker socket · 
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Apache 2.0 licensed.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Found a vulnerability? See [SECURITY.md](SECURITY.md). Apache 2.0 licensed.
 
 ---
 

@@ -19,7 +19,7 @@ from pathlib import Path
 sdk_path = Path(__file__).parent.parent / "sdk" / "python"
 sys.path.insert(0, str(sdk_path))
 
-from bso import Registry, RegistryError
+from catapult import Registry, RegistryError
 
 
 # Test configuration

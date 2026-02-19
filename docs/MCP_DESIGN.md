@@ -472,7 +472,7 @@ mcp/
 ├── pyproject.toml
 ├── README.md
 └── src/
-    └── model_registry_mcp/
+    └── catapult_mcp/
         ├── __init__.py
         ├── server.py                 # FastMCP server entry point
         ├── config.py                 # Settings (env vars)
@@ -540,7 +540,7 @@ class MCPConfig(BaseSettings):
 
 ```toml
 [project]
-name = "model-registry-mcp"
+name = "catapult-mcp"
 version = "1.0.0"
 description = "MCP server for Catapult"
 requires-python = ">=3.10"
@@ -551,7 +551,7 @@ dependencies = [
 ]
 
 [project.scripts]
-model-registry-mcp = "model_registry_mcp.server:main"
+catapult-mcp = "catapult_mcp.server:main"
 ```
 
 ---
@@ -667,7 +667,7 @@ export REGISTRY_URL="http://localhost/api"
 export REGISTRY_API_KEY="your-api-key"
 
 # Run MCP server
-model-registry-mcp
+catapult-mcp
 ```
 
 ### Claude Desktop Configuration
@@ -675,8 +675,8 @@ model-registry-mcp
 ```json
 {
   "mcpServers": {
-    "model-registry": {
-      "command": "model-registry-mcp",
+    "catapult": {
+      "command": "catapult-mcp",
       "env": {
         "REGISTRY_URL": "http://registry.internal/api",
         "REGISTRY_API_KEY": "your-api-key"
@@ -755,4 +755,4 @@ and healthy at http://localhost:9001. Logs show successful model loading."
 | **SDK Dependency** | Wraps `catapult` package (DRY) |
 | **Auth** | Same as WebUI/SDK (X-API-Key) |
 | **Config** | Environment variables (REGISTRY_*) |
-| **Entry Point** | `model-registry-mcp` CLI |
+| **Entry Point** | `catapult-mcp` CLI |

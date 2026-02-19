@@ -6,7 +6,7 @@ from mcp.client.stdio import stdio_client
 
 # Configuration
 API_KEY = os.getenv("REGISTRY_API_KEY", "your-api-key-here")
-SERVER_SCRIPT = "model_registry_mcp.server"
+SERVER_SCRIPT = "catapult_mcp.server"
 
 async def main():
     print("Starting MCP Integration Test...")
