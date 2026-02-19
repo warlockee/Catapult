@@ -1,4 +1,4 @@
-"""MCP Prompts for Model Registry.
+"""MCP Prompts for Catapult.
 
 Prompts provide guided workflows for common tasks.
 """

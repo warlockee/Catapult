@@ -1,4 +1,4 @@
-"""MCP Resources for Model Registry.
+"""MCP Resources for Catapult.
 
 Resources provide context that can be attached to conversations.
 """

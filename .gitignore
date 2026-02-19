@@ -44,3 +44,7 @@ agent_logs/
 kb/dockers/silero-vad/
 kb/dockers/torch_hub/
 kb/dockers/asr_eval/data/
+
+# AI agent state
+.agent/
+.cursor/

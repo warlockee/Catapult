@@ -4,13 +4,14 @@ Test Docker builds for all models.
 Triggers a Docker build for each model, waits for completion, and runs GC.
 """
 import json
+import os
 import subprocess
 import time
 import sys
 from urllib.parse import quote
 
-API_BASE = "http://localhost:8080/api/v1"
-API_KEY = "admin.admin"
+API_BASE = os.environ.get("TEST_BASE_URL", "http://localhost:8080/api/v1")
+API_KEY = os.environ.get("TEST_API_KEY", "test-key")
 
 def curl_get(endpoint):
     """Make GET request to API."""
