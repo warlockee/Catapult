@@ -29,6 +29,9 @@ mkdir -p "${STORAGE_ROOT}/artifacts" \
          "${STORAGE_ROOT}/docker_logs" \
          "${STORAGE_ROOT}/snapshots" \
          "${STORAGE_ROOT}/models" \
+         "${STORAGE_ROOT}/deployments" \
+         "${STORAGE_ROOT}/deployment_logs" \
+         "${STORAGE_ROOT}/benchmark_logs" \
          "infrastructure/nginx/ssl"
 
 # 4. Launch Services

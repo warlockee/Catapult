@@ -28,29 +28,25 @@ class Settings(BaseSettings):
     DEFAULT_ADMIN_KEY: str = "admin"
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,http://localhost"
 
-    # Storage
-    CEPH_MOUNT_PATH: str = "/data/ceph"
+    # Storage — defaults match container mount layout (./storage → /fsx)
+    CEPH_MOUNT_PATH: str = "/fsx"
     ARTIFACT_MOUNT_PATH: str = "/data/artifacts"
     LOCAL_STORAGE_PATH: str = "/data/local"
     MODEL_STORAGE_DIR: str = "images"
-    # These internal paths are now mounted from STORAGE_ROOT in docker-compose
-    # But we define defaults here that match the container mount points
-    SNAPSHOT_DIR: str = "./storage/snapshots"
-    SYNC_MODELS_PATH: str = "./storage/models"
-    SYNC_ARTIFACTS_PATH: str = "./storage/artifacts"
-    SYNC_DEPLOYMENTS_PATH: str = "./storage/deployments"
-    # Note: This path is specific to the container layout
-    DOCKER_TEMPLATES_PATH: str = "/app/kb/dockers" 
+    SNAPSHOT_DIR: str = "/fsx/snapshots"
+    SYNC_MODELS_PATH: str = "/fsx/models"
+    SYNC_ARTIFACTS_PATH: str = "/fsx/artifacts"
+    SYNC_DEPLOYMENTS_PATH: str = "/fsx/deployments"
+    DOCKER_TEMPLATES_PATH: str = "/app/kb/dockers"
 
     # Docker Build
     DOCKER_BUILD_DIR: str = "/tmp/docker_builds"
-    # Use a standard path inside the container, mount mapped from host
-    DOCKER_LOGS_DIR: str = "./storage/docker_logs"
-    DOCKER_JOBS_ARCHIVE_DIR: str = "./storage/dockerbuild_jobs"
-    VLLM_ARTIFACTS_PATH: str = "./storage/artifacts"
+    DOCKER_LOGS_DIR: str = "/fsx/docker_logs"
+    DOCKER_JOBS_ARCHIVE_DIR: str = "/fsx/dockerbuild_jobs"
+    VLLM_ARTIFACTS_PATH: str = "/fsx/artifacts"
 
     # Read-only artifact sources
-    VLLM_WHEELS_PATH: str = "./storage/vllm_wheels_prebuilt"
+    VLLM_WHEELS_PATH: str = "/fsx/vllm_wheels_prebuilt"
 
     # Docker Image GC
     DOCKER_IMAGE_RETENTION_DAYS: int = 7  # Days to keep superseded images before cleanup

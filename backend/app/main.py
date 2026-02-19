@@ -136,10 +136,11 @@ async def health_check():
     except Exception:
         pass
 
-    # Check Ceph filesystem
-    ceph_healthy = storage_service.is_ceph_mounted()
+    # Check storage filesystem (non-blocking — local storage may not need Ceph)
+    storage_healthy = storage_service.is_ceph_mounted()
 
-    overall_status = "healthy" if (db_healthy and ceph_healthy) else "unhealthy"
+    # Only DB is required for health; storage is informational
+    overall_status = "healthy" if db_healthy else "unhealthy"
 
     return JSONResponse(
         status_code=status.HTTP_200_OK if overall_status == "healthy" else status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -147,7 +148,7 @@ async def health_check():
             "status": overall_status,
             "components": {
                 "database": "healthy" if db_healthy else "unhealthy",
-                "ceph_storage": "healthy" if ceph_healthy else "unhealthy",
+                "storage": "healthy" if storage_healthy else "degraded",
             },
             "version": settings.APP_VERSION,
         }
