@@ -3,8 +3,9 @@ Deployment model for tracking deployments.
 """
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, ForeignKey, Integer, Boolean
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base

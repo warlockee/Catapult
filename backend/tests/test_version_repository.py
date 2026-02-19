@@ -1,12 +1,13 @@
 """
 Tests for VersionRepository update_metadata method.
 """
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
-from app.repositories.version_repository import VersionRepository
+import pytest
+
 from app.core.exceptions import VersionNotFoundError
+from app.repositories.version_repository import VersionRepository
 
 
 class TestVersionRepositoryUpdateMetadata:

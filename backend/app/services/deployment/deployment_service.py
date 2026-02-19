@@ -8,30 +8,28 @@ Coordinates between:
 """
 import logging
 from datetime import datetime, timedelta
-from typing import Optional, List
+from typing import List, Optional
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from app.core.config import settings
 from app.core.exceptions import (
     ContainerNotFoundError,
-    DeploymentNotFoundError,
-    DeploymentExecutionError,
-    DeploymentNotRunningError,
     DeploymentAlreadyRunningError,
+    DeploymentExecutionError,
+    DeploymentNotFoundError,
+    DeploymentNotRunningError,
     DockerImageNotFoundError,
     VersionNotFoundError,
 )
 from app.models.deployment import Deployment
-from app.models.version import Version
 from app.models.docker_build import DockerBuild
-from app.models.benchmark import Benchmark
-from app.services.deployment.executor_base import DeploymentConfig, DeploymentResult, ContainerStatus
-from app.services.deployment.local_executor import LocalDeploymentExecutor
+from app.models.version import Version
+from app.services.deployment.executor_base import ContainerStatus, DeploymentConfig
 from app.services.deployment.k8s_executor import K8sDeploymentExecutor
+from app.services.deployment.local_executor import LocalDeploymentExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -572,9 +570,9 @@ class DeploymentService:
             await db.commit()
 
             # Determine appropriate endpoint based on model's server_type
-            from app.services.benchmark_service import get_inference_endpoint
-            from app.models.release import Release
             from app.models.model import Model
+            from app.models.release import Release
+            from app.services.benchmark_service import get_inference_endpoint
 
             endpoint_path = "/v1/chat/completions"  # Default
             request_body = None

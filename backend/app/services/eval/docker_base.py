@@ -17,13 +17,13 @@ import logging
 import re
 from abc import abstractmethod
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 from app.services.eval.base import (
-    Evaluator,
     EvaluationConfig,
-    EvaluationResult,
     EvaluationMetrics,
+    EvaluationResult,
+    Evaluator,
     ProgressCallback,
 )
 

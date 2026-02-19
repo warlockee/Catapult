@@ -6,7 +6,7 @@ Defines the interface that all deployment executors must implement.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Dict, AsyncIterator
+from typing import AsyncIterator, Dict, Optional
 from uuid import UUID
 
 

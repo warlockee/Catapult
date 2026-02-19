@@ -5,6 +5,7 @@ This file is automatically loaded by pytest before running tests.
 It sets up necessary environment variables and common fixtures.
 """
 import os
+
 import pytest
 
 # Set environment variables BEFORE any app imports

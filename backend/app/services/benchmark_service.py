@@ -14,19 +14,19 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 import httpx
-from sqlalchemy import select, desc
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import DeploymentNotFoundError
 from app.models.benchmark import Benchmark
 from app.models.deployment import Deployment
-from app.models.release import Release
 from app.models.model import Model
+from app.models.release import Release
 from app.schemas.benchmark import BenchmarkSummary
-from app.core.exceptions import DeploymentNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -895,7 +895,7 @@ class BenchmarkService:
                         continue
 
                 # All endpoints failed
-                logger.error(f"Health check failed - no endpoints responded")
+                logger.error("Health check failed - no endpoints responded")
                 return False
         except Exception as e:
             logger.error(f"Health check failed: {e}")
@@ -1313,7 +1313,6 @@ class BenchmarkService:
 
         # Auto-detect endpoint for deployments if not explicitly specified
         # If deployment_id is set and endpoint_path is default "/health", use server_type-based detection
-        auto_detected_endpoint = False
         if benchmark.deployment_id and benchmark.endpoint_path == "/health":
             # Auto-detect: use server_type-based endpoint for inference benchmark
             benchmark.endpoint_path = inference_endpoint
@@ -1322,7 +1321,6 @@ class BenchmarkService:
                 benchmark.meta_data = {}
             if "request_body" not in benchmark.meta_data:
                 benchmark.meta_data["request_body"] = inference_payload
-            auto_detected_endpoint = True
             logger.info(f"Auto-detected endpoint {inference_endpoint} for deployment benchmark based on server_type {server_type}")
             await db.commit()
 

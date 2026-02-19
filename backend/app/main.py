@@ -1,21 +1,21 @@
 """
 FastAPI main application entry point.
 """
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.database import engine
-from app.core.exception_handlers import register_exception_handlers
 from app.core.event_handlers import register_all_handlers
-from app.api.v1.router import api_router
-from app.services.storage_service import storage_service
+from app.core.exception_handlers import register_exception_handlers
+from app.services.docker_service import docker_service
+from app.services.filesystem_sync_service import fs_sync_service
 from app.services.garbage_collector import cleanup_artifacts
 from app.services.snapshot_service import snapshot_service
-from app.services.filesystem_sync_service import fs_sync_service
-from app.services.docker_service import docker_service
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from app.services.storage_service import storage_service
 
 # Create scheduler
 scheduler = AsyncIOScheduler()

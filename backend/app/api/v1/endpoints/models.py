@@ -3,19 +3,19 @@ API endpoints for models.
 
 Uses ModelRepository for data access and domain exceptions for error handling.
 """
-from typing import List
 from uuid import UUID
+
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import verify_api_key, require_operator, require_admin
+from app.core.security import require_admin, require_operator, verify_api_key
 from app.models.api_key import ApiKey
 from app.repositories.model_repository import ModelRepository
 from app.repositories.version_repository import VersionRepository
-from app.schemas.model import ModelCreate, ModelUpdate, ModelResponse, ModelWithVersions, ModelOption
-from app.schemas.version import VersionResponse
+from app.schemas.model import ModelCreate, ModelOption, ModelResponse, ModelUpdate, ModelWithVersions
 from app.schemas.pagination import PaginatedResponse
+from app.schemas.version import VersionResponse
 from app.services.audit_service import create_audit_log
 
 router = APIRouter()

@@ -1,20 +1,19 @@
 """
 Security utilities for API key authentication and RBAC.
 """
-import bcrypt
 import time
-from typing import Optional, Dict, Tuple, Callable
 from datetime import datetime
+from typing import Dict, Optional, Tuple
 from uuid import UUID
-from functools import wraps
-from fastapi import HTTPException, Security, status, Depends
+
+import bcrypt
+from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import APIKeyHeader
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.api_key import ApiKey, ApiKeyRole
-
 
 # API Key header
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -103,15 +102,13 @@ async def get_api_key_from_db(
         ApiKey object if valid, None otherwise
     """
     from app.core.config import settings
-    start_time = time.time()
-
     # Check cache first
     if api_key in _api_key_cache:
         cached_id, expiry = _api_key_cache[api_key]
         if time.time() < expiry:
             # Cache hit - fetch the key by ID (fast DB lookup)
             result = await db.execute(
-                select(ApiKey).where(ApiKey.id == UUID(cached_id)).where(ApiKey.is_active == True)
+                select(ApiKey).where(ApiKey.id == UUID(cached_id)).where(ApiKey.is_active.is_(True))
             )
             db_key = result.scalar_one_or_none()
             if db_key:
@@ -128,7 +125,7 @@ async def get_api_key_from_db(
             return None
             
         # Find key by prefix
-        stmt = select(ApiKey).where(ApiKey.prefix == prefix).where(ApiKey.is_active == True)
+        stmt = select(ApiKey).where(ApiKey.prefix == prefix).where(ApiKey.is_active.is_(True))
         result = await db.execute(stmt)
         db_key = result.scalar_one_or_none()
 

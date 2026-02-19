@@ -3,8 +3,9 @@ Model metadata for ML models.
 """
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Text, DateTime, Index, Boolean
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+
+from sqlalchemy import Boolean, Column, DateTime, Index, String, Text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base

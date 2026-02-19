@@ -4,7 +4,7 @@ Custom exception hierarchy for domain-specific errors.
 This module provides a clean separation between domain errors and HTTP concerns.
 Services raise domain exceptions, and the exception handlers in main.py map them to HTTP responses.
 """
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 
 class DomainException(Exception):

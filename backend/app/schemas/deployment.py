@@ -3,9 +3,10 @@ Pydantic schemas for Deployment.
 """
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, Any
-from pydantic import BaseModel, Field
+from typing import Any, Dict, Optional
 from uuid import UUID
+
+from pydantic import BaseModel, Field
 
 
 class DeploymentType(str, Enum):

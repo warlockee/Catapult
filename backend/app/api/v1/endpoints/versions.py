@@ -9,12 +9,13 @@ TERMINOLOGY:
 """
 from typing import List, Optional
 from uuid import UUID
+
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.exceptions import InvalidConfigurationError
-from app.core.security import verify_api_key, require_operator
+from app.core.security import require_operator, verify_api_key
 from app.models.api_key import ApiKey
 from app.repositories.model_repository import ModelRepository
 from app.repositories.version_repository import VersionRepository
@@ -22,7 +23,7 @@ from app.schemas.deployment import DeploymentResponse
 from app.schemas.docker_build import DockerBuildCreate
 from app.schemas.mlflow import MlflowMetadataResponse
 from app.schemas.pagination import PaginatedResponse
-from app.schemas.version import VersionCreate, VersionUpdate, VersionResponse, VersionWithModel, VersionOption
+from app.schemas.version import VersionCreate, VersionOption, VersionResponse, VersionUpdate, VersionWithModel
 from app.services.audit_service import create_audit_log
 from app.services.docker_service import docker_service
 from app.services.task_dispatcher import task_dispatcher

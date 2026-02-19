@@ -8,9 +8,10 @@ Tests cover:
 
 Run with: pytest backend/tests/test_task_dispatcher.py -v
 """
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
+
+import pytest
 
 
 class TestNoOpTaskDispatcher:
@@ -302,7 +303,7 @@ class TestDispatcherSelection:
 
     def test_creates_noop_dispatcher_for_test_environment(self):
         """Test that NoOpTaskDispatcher is created in test environment."""
-        from app.services.task_dispatcher import _create_dispatcher, NoOpTaskDispatcher
+        from app.services.task_dispatcher import NoOpTaskDispatcher, _create_dispatcher
 
         with patch.dict('os.environ', {'ENVIRONMENT': 'test'}):
             dispatcher = _create_dispatcher()
@@ -311,7 +312,7 @@ class TestDispatcherSelection:
 
     def test_creates_celery_dispatcher_for_production(self):
         """Test that CeleryTaskDispatcher is created in production."""
-        from app.services.task_dispatcher import _create_dispatcher, CeleryTaskDispatcher
+        from app.services.task_dispatcher import CeleryTaskDispatcher, _create_dispatcher
 
         with patch.dict('os.environ', {'ENVIRONMENT': 'production'}):
             dispatcher = _create_dispatcher()
@@ -320,7 +321,7 @@ class TestDispatcherSelection:
 
     def test_creates_celery_dispatcher_by_default(self):
         """Test that CeleryTaskDispatcher is created when ENVIRONMENT is not set."""
-        from app.services.task_dispatcher import _create_dispatcher, CeleryTaskDispatcher
+        from app.services.task_dispatcher import CeleryTaskDispatcher, _create_dispatcher
 
         with patch.dict('os.environ', {}, clear=True):
             # Remove ENVIRONMENT if it exists
@@ -343,7 +344,7 @@ class TestTaskDispatcherProtocol:
 
     def test_noop_dispatcher_implements_protocol(self):
         """Test NoOpTaskDispatcher implements the protocol."""
-        from app.services.task_dispatcher import NoOpTaskDispatcher, TaskDispatcherProtocol
+        from app.services.task_dispatcher import NoOpTaskDispatcher
 
         dispatcher = NoOpTaskDispatcher()
 
@@ -358,7 +359,7 @@ class TestTaskDispatcherProtocol:
 
     def test_celery_dispatcher_implements_protocol(self):
         """Test CeleryTaskDispatcher implements the protocol."""
-        from app.services.task_dispatcher import CeleryTaskDispatcher, TaskDispatcherProtocol
+        from app.services.task_dispatcher import CeleryTaskDispatcher
 
         dispatcher = CeleryTaskDispatcher()
 

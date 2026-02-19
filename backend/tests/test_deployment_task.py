@@ -8,9 +8,10 @@ Tests cover:
 
 Run with: pytest backend/tests/test_deployment_task.py -v
 """
-import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
+
+import pytest
 
 # Skip all tests if celery is not installed
 celery = pytest.importorskip("celery")

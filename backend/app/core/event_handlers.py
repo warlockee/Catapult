@@ -8,12 +8,12 @@ import logging
 from uuid import UUID
 
 from app.core.events import (
-    event_dispatcher,
-    handles,
-    ReleaseCreatedEvent,
-    DockerBuildRequestedEvent,
     DockerBuildCompletedEvent,
     DockerBuildFailedEvent,
+    DockerBuildRequestedEvent,
+    ReleaseCreatedEvent,
+    event_dispatcher,
+    handles,
 )
 
 logger = logging.getLogger(__name__)

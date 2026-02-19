@@ -1,14 +1,14 @@
 """
 Repository for ApiKey entity database operations.
 """
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
 from uuid import UUID
-from sqlalchemy import select, func, desc, and_
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.repositories.base import BaseRepository
+from sqlalchemy import desc, func, select
+
+from app.core.exceptions import ApiKeyAlreadyExistsError, ApiKeyNotFoundError
 from app.models.api_key import ApiKey
-from app.core.exceptions import ApiKeyNotFoundError, ApiKeyAlreadyExistsError
+from app.repositories.base import BaseRepository
 
 
 class ApiKeyRepository(BaseRepository[ApiKey]):
