@@ -16,7 +16,6 @@ from app.core.config import settings
 from app.core.database import async_session_maker
 from app.core.security import hash_api_key
 from app.models.api_key import ApiKey
-from app.models.docker_build import DockerBuild # Fix SQLAlchemy registry error
 
 
 async def create_api_key(name: str, key_value: str = None, expires_at: str = None, reset: bool = False, role: str = "operator") -> tuple[str, str]:

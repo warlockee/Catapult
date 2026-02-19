@@ -6,16 +6,16 @@ Uses ApiKeyRepository for data access and domain exceptions for error handling.
 import secrets
 from typing import List
 from uuid import UUID
-from fastapi import APIRouter, Depends, status, Request
+
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import hash_api_key, invalidate_api_key_cache, require_admin
-from app.core.config import settings
-from app.core.exceptions import ApiKeyNotFoundError
 from app.models.api_key import ApiKey
 from app.repositories.api_key_repository import ApiKeyRepository
-from app.schemas.api_key import ApiKeyCreate, ApiKeyResponse, ApiKeyCreated
+from app.schemas.api_key import ApiKeyCreate, ApiKeyCreated, ApiKeyResponse
 from app.services.audit_service import create_audit_log
 
 router = APIRouter()

@@ -7,8 +7,8 @@ This evaluator uses the asr-eval Docker container which has all heavy dependenci
 import re
 from typing import Any, Dict, List
 
-from app.services.eval.docker_base import DockerEvaluator
 from app.services.eval.base import EvaluationConfig
+from app.services.eval.docker_base import DockerEvaluator
 from app.services.eval.factory import register_evaluator
 
 

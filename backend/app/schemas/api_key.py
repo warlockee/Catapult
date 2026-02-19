@@ -2,10 +2,11 @@
 Pydantic schemas for API Key.
 """
 from datetime import datetime
-from typing import Optional
 from enum import Enum
-from pydantic import BaseModel, Field
+from typing import Optional
 from uuid import UUID
+
+from pydantic import BaseModel, Field
 
 
 class ApiKeyRoleEnum(str, Enum):

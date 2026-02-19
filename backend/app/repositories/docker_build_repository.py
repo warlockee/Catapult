@@ -1,14 +1,14 @@
 """
 Repository for DockerBuild entity database operations.
 """
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
 from uuid import UUID
-from sqlalchemy import select, func, desc, and_
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.repositories.base import BaseRepository
-from app.models.docker_build import DockerBuild
+from sqlalchemy import and_, desc, func, select
+
 from app.core.exceptions import DockerBuildNotFoundError
+from app.models.docker_build import DockerBuild
+from app.repositories.base import BaseRepository
 
 
 class DockerBuildRepository(BaseRepository[DockerBuild]):

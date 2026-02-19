@@ -6,21 +6,27 @@ Uses DockerBuildRepository for data access and domain exceptions for error handl
 import os
 from typing import Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, BackgroundTasks, Query, Request, status
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db, async_session_maker
 from app.core.config import settings
-from app.core.security import verify_api_key, require_operator
+from app.core.database import async_session_maker, get_db
 from app.core.exceptions import InvalidPathError, TemplateNotFoundError
+from app.core.security import require_operator, verify_api_key
 from app.models.api_key import ApiKey
 from app.repositories.docker_build_repository import DockerBuildRepository
 from app.repositories.version_repository import VersionRepository
-from app.schemas.docker_build import DockerBuildCreate, DockerBuildResponse, DockerDiskUsageResponse, DockerDiskUsageComponent
+from app.schemas.docker_build import (
+    DockerBuildCreate,
+    DockerBuildResponse,
+    DockerDiskUsageComponent,
+    DockerDiskUsageResponse,
+)
 from app.schemas.pagination import PaginatedResponse
-from app.services.docker_service import docker_service
 from app.services.audit_service import create_audit_log
+from app.services.docker_service import docker_service
 from app.services.task_dispatcher import task_dispatcher
 
 router = APIRouter()
@@ -121,7 +127,6 @@ async def get_dockerfile_template(
     # Only auto-detect if user requested a generic type (organic/default)
     # If user explicitly requested asr-vllm or asr-allinone, respect that choice
     effective_template_type = template_type
-    asr_types = {"asr-vllm", "asr-allinone", "asr-azure-allinone"}
     should_auto_detect = template_type in ("organic", "default") or template_type not in ALLOWED_TEMPLATE_TYPES
 
     if release_id and should_auto_detect:
@@ -412,7 +417,7 @@ async def get_disk_usage(
             disk_total_bytes=data["disk_total_bytes"],
             disk_total_human=data["disk_total_human"],
         )
-    except Exception as e:
+    except Exception:
         # Fallback if worker is unavailable
         import shutil
         try:

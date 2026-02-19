@@ -1,17 +1,16 @@
 """
 Repository for Deployment entity database operations.
 """
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
 from uuid import UUID
-from sqlalchemy import select, func, desc, and_
-from sqlalchemy.ext.asyncio import AsyncSession
+
+from sqlalchemy import and_, desc, func, select
 from sqlalchemy.orm import joinedload
 
-from app.repositories.base import BaseRepository
+from app.core.exceptions import DeploymentNotFoundError, VersionNotFoundError
 from app.models.deployment import Deployment
 from app.models.version import Version
-from app.models.model import Model
-from app.core.exceptions import DeploymentNotFoundError, VersionNotFoundError
+from app.repositories.base import BaseRepository
 
 
 class DeploymentRepository(BaseRepository[Deployment]):

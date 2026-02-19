@@ -4,17 +4,17 @@ Repository for Version entity database operations.
 Encapsulates all database queries related to versions, providing a clean
 interface for services and endpoints to interact with version data.
 """
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
 from uuid import UUID
-from sqlalchemy import select, func, desc, and_, exists
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, contains_eager
 
-from app.repositories.base import BaseRepository
-from app.models.version import Version
-from app.models.model import Model
+from sqlalchemy import and_, desc, exists, func, select
+from sqlalchemy.orm import contains_eager, joinedload
+
+from app.core.exceptions import ModelNotFoundError, VersionAlreadyExistsError, VersionNotFoundError
 from app.models.deployment import Deployment
-from app.core.exceptions import VersionNotFoundError, VersionAlreadyExistsError, ModelNotFoundError
+from app.models.model import Model
+from app.models.version import Version
+from app.repositories.base import BaseRepository
 
 
 class VersionRepository(BaseRepository[Version]):

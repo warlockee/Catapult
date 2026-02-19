@@ -4,19 +4,19 @@ API v1 router that includes all endpoint routers.
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
-    models,
-    versions,
-    deployments,
     api_keys,
-    audit,
     artifacts,
-    system,
-    docker,
+    audit,
     benchmarks,
+    deployments,
+    docker,
     evaluations,
     internal_benchmark,
     # Note: asr endpoint disabled - requires heavy dependencies (numpy, torch, etc.)
     # WER evaluation now in separate /evaluations endpoint
+    models,
+    system,
+    versions,
 )
 
 # Create main API router

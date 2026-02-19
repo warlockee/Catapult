@@ -1,11 +1,13 @@
-from datetime import datetime, timedelta
-from sqlalchemy import Column, String, DateTime, ForeignKey, Text, ARRAY
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
 import uuid
-from app.core.database import Base
+from datetime import datetime, timedelta
+
+from sqlalchemy import ARRAY, Column, DateTime, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+
 from app.core.config import settings
+from app.core.database import Base
 
 
 class DockerBuild(Base):

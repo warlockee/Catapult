@@ -60,7 +60,7 @@ Example: `EVAL_PROGRESS: 42/100`
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Awaitable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 
 @dataclass

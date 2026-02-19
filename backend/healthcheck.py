@@ -13,6 +13,7 @@ Health check passes if:
 import os
 import sys
 
+
 def check_redis():
     """Check if Redis broker is reachable."""
     try:

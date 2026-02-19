@@ -6,10 +6,10 @@ DEPRECATED: Use app.schemas.version instead.
 from app.schemas.version import (
     VersionBase,
     VersionCreate,
-    VersionUpdate,
-    VersionResponse,
-    VersionWithModel,
     VersionOption,
+    VersionResponse,
+    VersionUpdate,
+    VersionWithModel,
 )
 
 # Backward compatibility aliases

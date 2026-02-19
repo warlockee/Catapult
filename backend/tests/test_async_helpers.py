@@ -9,9 +9,9 @@ Tests cover:
 Run with: pytest backend/tests/test_async_helpers.py -v
 """
 import asyncio
-import pytest
-from unittest.mock import Mock, patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, patch
 
+import pytest
 
 # Common patch targets - these are where the imports happen
 ENGINE_PATCH = 'app.core.database.engine'

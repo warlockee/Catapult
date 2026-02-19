@@ -9,14 +9,14 @@ Tests cover:
 
 Run with: pytest backend/tests/test_benchmark_repository.py -v
 """
-import pytest
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
+import pytest
+
 from app.core.exceptions import (
-    BenchmarkNotFoundError,
     BenchmarkNotCancellableError,
+    BenchmarkNotFoundError,
     BenchmarkNotUpdatableError,
 )
 

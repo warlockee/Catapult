@@ -8,12 +8,12 @@ import logging
 from datetime import datetime, timedelta
 from typing import List, Tuple
 
-from sqlalchemy import select, and_
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.docker_build import DockerBuild
-from app.core.config import settings
 from app.core.celery_app import celery_app
+from app.core.config import settings
+from app.models.docker_build import DockerBuild
 
 logger = logging.getLogger(__name__)
 

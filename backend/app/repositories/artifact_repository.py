@@ -2,17 +2,16 @@
 Repository for Artifact entity database operations.
 """
 from datetime import datetime
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
 from uuid import UUID
-from sqlalchemy import select, func, desc, and_
-from sqlalchemy.ext.asyncio import AsyncSession
+
+from sqlalchemy import and_, desc, func, select
 from sqlalchemy.orm import joinedload
 
-from app.repositories.base import BaseRepository
+from app.core.exceptions import ArtifactAlreadyExistsError, ArtifactNotFoundError, VersionNotFoundError
 from app.models.artifact import Artifact
 from app.models.version import Version
-from app.models.model import Model
-from app.core.exceptions import ArtifactNotFoundError, ArtifactAlreadyExistsError, VersionNotFoundError
+from app.repositories.base import BaseRepository
 
 
 class ArtifactRepository(BaseRepository[Artifact]):

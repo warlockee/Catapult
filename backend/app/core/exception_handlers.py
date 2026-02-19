@@ -5,19 +5,20 @@ Register these handlers in main.py to automatically convert domain exceptions
 to appropriate HTTP status codes and response formats.
 """
 import logging
+
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette import status
 
 from app.core.exceptions import (
+    AlreadyExistsError,
+    AuthorizationError,
     DomainException,
     NotFoundError,
-    AlreadyExistsError,
-    ValidationError,
-    AuthorizationError,
     OperationError,
     ServiceUnavailableError,
+    ValidationError,
 )
 
 logger = logging.getLogger(__name__)

@@ -2,19 +2,18 @@
 Repository for Benchmark entity database operations.
 """
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from sqlalchemy import select, desc
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import desc, select
 
-from app.repositories.base import BaseRepository
-from app.models.benchmark import Benchmark
 from app.core.exceptions import (
-    BenchmarkNotFoundError,
     BenchmarkNotCancellableError,
+    BenchmarkNotFoundError,
     BenchmarkNotUpdatableError,
 )
+from app.models.benchmark import Benchmark
+from app.repositories.base import BaseRepository
 
 
 class BenchmarkRepository(BaseRepository[Benchmark]):
