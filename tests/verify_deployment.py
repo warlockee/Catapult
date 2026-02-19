@@ -12,10 +12,10 @@ import openai
 import soundfile as sf
 
 # --- Configuration ---
-DEFAULT_BASE_URL = "http://172.202.29.125:26000/v1"
-DEFAULT_API_KEY = "EMPTY"
+DEFAULT_BASE_URL = os.environ.get("TEST_BASE_URL", "http://localhost:8080/api/v1")
+DEFAULT_API_KEY = os.environ.get("TEST_API_KEY", "EMPTY")
 AUDIO_EXAMPLE_PATH = "tests/example/hello_howru.wav"
-CLONE_REF_PATH = "tests/example/yoshua_bengio.wav"
+CLONE_REF_PATH = "tests/example/clone_reference.wav"
 
 # Global vars to be updated by args
 BASE_URL = DEFAULT_BASE_URL
@@ -35,7 +35,7 @@ def get_model_id():
     except Exception as e:
         print(f"⚠️ Failed to fetch model ID: {e}")
         print("   Using fallback ID.")
-        return "audio-v2-generation-3B-dpo-checkpoint-2100"
+        return "default-model"
 
 MODEL_ID = None # Will be set in main()
 

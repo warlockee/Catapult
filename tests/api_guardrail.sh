@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Configuration
-API_URL="http://localhost/api/v1"
-API_KEY="oaYjukB1CR0ZuWpUq4qYDjdviVNoi0Pl2yITjIoJvUljOVlmjGUyqZ14jKGWjYvy"
+API_URL="${TEST_BASE_URL:-http://localhost:8080/api/v1}"
+API_KEY="${TEST_API_KEY:?ERROR: TEST_API_KEY environment variable must be set}"
 TIMESTAMP=$(date +%s)
 TEST_MODEL_NAME="guardrail-model-${TIMESTAMP}"
 TEST_RELEASE_VERSION="v1.0.0-${TIMESTAMP}"
@@ -78,7 +78,8 @@ cleanup() {
 # 1. System & Health
 # ==============================================================================
 log "Checking Health..."
-curl -s -w "%{http_code}" -o response.json "http://localhost/api/health" > response.status
+HEALTH_URL=$(echo "$API_URL" | sed 's|/v1||')/health
+curl -s -w "%{http_code}" -o response.json "$HEALTH_URL" > response.status
 assert_status "response" 200 || exit 1
 
 log "Checking Storage Stats..."

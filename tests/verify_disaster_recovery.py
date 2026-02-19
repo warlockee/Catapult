@@ -7,7 +7,7 @@ import os
 import requests
 import json
 
-API_URL = "http://localhost/api/v1"
+API_URL = os.environ.get("TEST_BASE_URL", "http://localhost:8080/api/v1")
 SCHEMA = "model_registry"
 
 def run_cmd(cmd, cwd=None, check=True):
@@ -92,7 +92,7 @@ def main():
     print("Waiting for backend to come up...")
     for i in range(30):
         try:
-             res = requests.get("http://localhost/api/health")
+             res = requests.get(API_URL.replace("/v1", "") + "/health")
              if res.status_code == 200:
                  print("Backend is UP.")
                  break
@@ -121,7 +121,7 @@ def main():
     time.sleep(10) # Give it time to attempt restore
     for i in range(30):
         try:
-             res = requests.get("http://localhost/api/health")
+             res = requests.get(API_URL.replace("/v1", "") + "/health")
              if res.status_code == 200:
                  break
         except:

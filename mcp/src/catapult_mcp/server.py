@@ -1,10 +1,10 @@
-"""MCP Server for Model Registry."""
+"""MCP Server for Catapult."""
 
 from mcp.server.fastmcp import FastMCP
 
 # Create the MCP server
 mcp = FastMCP(
-    "Model Registry",
+    "Catapult",
     instructions="MCP server for Catapult - manage models, versions, and deployments",
 )
 

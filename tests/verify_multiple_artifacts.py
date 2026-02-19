@@ -5,8 +5,8 @@ import sys
 import uuid
 
 # Configuration
-API_BASE_URL = "http://localhost/api/v1"
-HEADERS = {"x-api-key": "test-key-123"}
+API_BASE_URL = os.environ.get("TEST_BASE_URL", "http://localhost:8080/api/v1")
+HEADERS = {"x-api-key": os.environ.get("TEST_API_KEY", "test-key")}
 SCHEMA = "model_registry"
 
 def create_dummy_artifact(release_id, model_id, name):
