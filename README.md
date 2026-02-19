@@ -193,10 +193,10 @@ MLflow tracks experiments. DVC versions data. W&B visualizes training. **Catapul
                                        │
                         ┌──────────────┼──────────────┐
                         │              │              │
-                   ┌────┴────┐   ┌────┴────┐   ┌────┴────┐
-                   │ Celery  │   │  Redis  │   │ Postgres│
-                   │ Worker  │   │  Queue  │   │   DB    │
-                   │+Docker  │   └─────────┘   └─────────┘
+                   ┌────┴────┐    ┌────┴────┐    ┌────┴────┐
+                   │ Celery  │    │  Redis  │    │ Postgres│
+                   │ Worker  │    │  Queue  │    │   DB    │
+                   │+Docker  │    └─────────┘    └─────────┘
                    └─────────┘
 ```
 
