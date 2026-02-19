@@ -1,168 +1,233 @@
 # Catapult
 
-- `backend/`: FastAPI application
-- `frontend/`: React frontend application
-- `infrastructure/`: Nginx and other config
-- `sdk/`: Python client SDK
+**The open-source MLOps platform for teams that actually ship models to production.**
 
-A lightweight, Python-first MLOps platform tailored for PyTorch/ML teams. Provides version management, metadata tracking, and deployment coordination for containerized ML applications.
+Most model registries stop at tracking metadata. Catapult picks up where they leave off — it builds your Docker images, deploys your models, benchmarks performance, evaluates quality, and promotes to production. One platform, one `deploy.sh`, zero glue scripts.
 
-## Features
+---
 
-- 🚀 **Simple Deployment**: Single `docker-compose up` command
-- 🐍 **Python-First**: FastAPI backend + Python SDK
-- 📦 **Version Management**: Track Docker images, model versions, and deployments
-- 🔍 **Metadata Tracking**: Store training metrics, model info, and custom metadata
-- 🔐 **API Key Authentication**: Simple and secure
-- 🌐 **Web UI**: Clean React interface for browsing and management
-- 📊 **Audit Logging**: Complete history of all operations
-- 💾 **Ceph Integration**: Support for shared storage filesystems
+## The Problem
 
-## Quick Start
+You trained a great model. Now what?
 
-### Prerequisites
+- You write a Dockerfile. Then another for a different GPU. Then another for ARM. Then one for audio models. Each one is slightly different and lives in someone's home directory.
+- You `ssh` into machines to deploy, then forget which GPU is running what.
+- Benchmarking is a Jupyter notebook someone ran once and lost.
+- Your "model registry" is a shared Google Sheet with columns like "status" and "notes" that nobody updates.
+- Promoting to production means pinging three people on Slack and hoping the deploy script still works.
 
-- Docker and Docker Compose
-- (Optional) Ceph filesystem mount
+Sound familiar?
 
-### 1. Clone and Configure
+## The Solution
+
+Catapult is a self-hosted platform that manages the full lifecycle of ML models — from registration through deployment to production promotion. Built by an ML team that got tired of duct-taping together shell scripts, spreadsheets, and manual processes.
 
 ```bash
-git clone https://github.com/warlockee/Catapult.git
+git clone https://github.com/warlockee/Catapult
 cd Catapult
-
-# Copy environment template
-cp .env.example .env
-
-# Edit .env with your configuration
-nano .env
-```
-
-**Required Configuration:**
-- `POSTGRES_PASSWORD`: Set a secure database password
-- `API_KEY_SALT`: Set a random 32+ character salt
-- `CEPH_MOUNT_PATH`: Path to Ceph mount (or use `/tmp/registry-storage` for testing)
-
-### 2. Deploy
-
-```bash
-# Make deploy script executable
-chmod +x deploy.sh
-
-# Run deployment
 ./deploy.sh
 ```
 
-The script will:
-- Build Docker images
-- Start all services (PostgreSQL, Backend, Frontend, Nginx)
-- Run database migrations
-- Create an initial API key
+That's it. Backend, frontend, worker, database, reverse proxy — all running.
 
-### 3. Access the Application
+---
 
-- **Web UI**: http://localhost
-- **API Documentation**: http://localhost/docs
-- **API Endpoint**: http://localhost/api
+## What It Does
 
-### 4. Configure API Key
+### Model & Version Management
+Register models, track versions, promote releases. Every version carries its metadata, training metrics, quantization details, and lineage — stored as flexible JSONB, not rigid schemas you have to fight.
 
-When you first access the web UI, you'll need to enter your API key. Use the key generated during deployment (shown in the deploy script output).
+```python
+from catapult import Registry
+
+registry = Registry(base_url="http://localhost/api", api_key="your-key")
+
+model = registry.create_model(name="myorg/llama-3-8b", server_type="vllm")
+version = registry.create_version(
+    model_name=model.name,
+    version="1.0.0",
+    metadata={"accuracy": 0.95, "framework": "pytorch-2.1"}
+)
+registry.promote_version(version.id)  # Mark as official release
+```
+
+### Docker Build System
+Trigger Docker builds from the UI with real-time log streaming. Choose from **25+ specialized Dockerfile templates** covering vLLM, ASR, TTS, embedding, and multimodal models — across CUDA (A100/H100), CPU, ROCm, ARM, Neuron (AWS Inferentia), TPU, and Gaudi (HPU) platforms. Stuck builds recover automatically. Old images get garbage-collected.
+
+### One-Click Deployments
+Deploy containers directly from the registry with GPU-aware scheduling. Monitor health, tail logs, restart — all from the dashboard. The system auto-detects available GPUs and allocates them to deployments.
+
+### Performance Benchmarking
+Run latency and throughput benchmarks against any deployment. Track TTFT, p50/p95/p99 latencies, tokens/second, and error rates. Execute inline or in isolated Docker containers. Compare across versions to catch regressions before they hit production.
+
+### Quality Evaluation
+Pluggable evaluation framework with factory-based registration. Ships with ASR evaluation (WER, CER) out of the box — add your own evaluators for LLM quality, vision accuracy, or any domain-specific metric. Quality and performance tracked separately because a fast model that hallucinates isn't a good model.
+
+### Artifact Management
+Upload wheels, checkpoints, configs, and binaries. Browse shared filesystems (Ceph, NFS, FSx). Attach multiple artifacts to Docker builds. SHA256 integrity verification included.
+
+### GPU Fleet Visibility
+See which models run on which machines, which GPUs are allocated, and what's available. No more `ssh`-ing into boxes to figure out what's running where.
+
+### MLflow Bridge
+Already using MLflow for experiment tracking? Catapult isn't a replacement — it's the next step. Link versions to MLflow runs and experiments, with automatic metadata sync.
+
+---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                         Client Layer                         │
-├──────────────────────────────┬──────────────────────────────┤
-│      Web UI (React)          │       Python SDK             │
-└──────────────────────────────┴──────────────────────────────┘
-                            │
-                            ▼
-                    ┌───────────────┐
-                    │  Nginx Proxy  │
-                    └───────────────┘
-                            │
-                ┌───────────┴───────────┐
-                ▼                       ▼
-        ┌──────────────┐        ┌──────────────┐
-        │ React SPA    │        │  FastAPI     │
-        │ (Static)     │        │  Backend     │
-        └──────────────┘        └──────────────┘
-                                        │
-                                        ▼
-                                ┌──────────────┐
-                                │ PostgreSQL   │
-                                └──────────────┘
+                    ┌─────────────┐
+                    │    Nginx    │ :8080
+                    │  (reverse   │
+                    │   proxy)    │
+                    └──────┬──────┘
+                           │
+              ┌────────────┴────────────┐
+              │                         │
+       ┌──────┴──────┐          ┌──────┴──────┐
+       │   React UI  │          │   FastAPI   │ :8000
+       │  TypeScript  │          │   Backend   │
+       │   Vite SPA   │          │   (async)   │
+       └─────────────┘          └──────┬──────┘
+                                       │
+                         ┌─────────────┼─────────────┐
+                         │             │             │
+                  ┌──────┴──────┐ ┌───┴────┐ ┌──────┴──────┐
+                  │   Celery    │ │ Redis  │ │  PostgreSQL │
+                  │   Worker    │ │ Queue  │ │     (DB)    │
+                  │+Docker sock │ │        │ │             │
+                  └─────────────┘ └────────┘ └─────────────┘
 ```
 
-**Components:**
-- **Nginx**: Reverse proxy and static file server
-- **React Frontend**: Modern web UI built with React + TypeScript
-- **FastAPI Backend**: Python 3.11+ REST API
-- **PostgreSQL**: Primary database
-- **Python SDK**: Client library for programmatic access
+**Backend**: FastAPI with async SQLAlchemy 2.0, Pydantic v2, SSE log streaming, domain event system
+**Frontend**: React 18, TypeScript, Shadcn/ui, TanStack Query v5, Recharts
+**Worker**: Celery with Docker socket access for builds, deployments, and benchmarks
+**Database**: PostgreSQL 15 with JSONB columns and GIN indexes for flexible metadata
+**Queue**: Redis 7 for task brokering and result caching
 
-## Python SDK Usage
+### What Makes the Architecture Good
+
+- **Repository pattern** — Clean separation between API endpoints, business logic, and data access. Every model has a dedicated repository with shared base.
+- **Domain exceptions** — 25+ typed exceptions (`NotFoundError`, `AlreadyExistsError`, `OperationError`) mapped to HTTP codes. No raw `HTTPException` in business logic.
+- **Task dispatcher protocol** — `CeleryTaskDispatcher` for production, `NoOpTaskDispatcher` for testing. Adding new async task types means implementing one interface.
+- **Event-driven** — Domain events (`ReleaseCreated`, `DockerBuildCompleted`, `DeploymentStatusChanged`) enable loose coupling. Auto-trigger builds on version creation, notifications on deployment failures.
+- **Pluggable evaluators** — Register new evaluation types via factory pattern. No core changes needed.
+
+---
+
+## How It Compares
+
+| Feature | MLflow | DVC | Weights & Biases | **Catapult** |
+|---|---|---|---|---|
+| Model tracking | Yes | Yes | Yes | **Yes** |
+| Docker builds from UI | No | No | No | **25+ templates** |
+| Deploy from UI | No | No | No | **GPU-aware** |
+| Benchmarking | No | No | No | **TTFT, p50-p99, TPS** |
+| Quality evaluation | No | No | No | **Pluggable framework** |
+| GPU fleet management | No | No | No | **Yes** |
+| Filesystem integration | No | Partial | No | **Ceph, NFS, FSx** |
+| Self-hosted, single command | Partial | Yes | No | **Yes** |
+| Audit logging | Enterprise | No | Enterprise | **Included** |
+| RBAC (API keys) | Enterprise | No | Enterprise | **Included** |
+| MLflow integration | N/A | No | No | **Bridge, not replace** |
+
+MLflow tracks experiments. DVC versions data. W&B visualizes training runs. **Catapult handles everything after training** — the part where most teams lose weeks to shell scripts and tribal knowledge.
+
+---
+
+## Built For
+
+- **ML teams shipping models to production** — not just tracking experiments
+- **vLLM / PyTorch serving teams** — first-class LLM serving support with inference benchmarking
+- **Multi-platform teams** — CUDA, ROCm, ARM, Neuron, TPU, Gaudi templates out of the box
+- **Teams on shared storage** — native Ceph, NFS, and FSx integration, not just S3
+- **Teams that value simplicity** — one repo, one deploy command, no Kubernetes required
+
+---
+
+## Quick Start
+
+### Prerequisites
+- Docker & Docker Compose
+- A machine with GPU access (for model serving — Catapult itself runs on CPU)
+
+### Deploy
+
+```bash
+git clone https://github.com/warlockee/Catapult
+cd Catapult
+cp .env.example .env    # Configure DB, storage paths
+./deploy.sh
+```
+
+Open `http://localhost:8080` — your registry is ready.
+
+The script will:
+- Build Docker images
+- Start all services (PostgreSQL, Redis, Backend, Worker, Frontend, Nginx)
+- Run database migrations
+- Create an initial admin API key
+
+### Register Your First Model
+
+```bash
+# Via API
+curl -X POST http://localhost:8080/api/v1/models \
+  -H "X-API-Key: your-key" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "myorg/llama-3-8b", "storage_path": "/models/llama-3-8b", "server_type": "vllm"}'
+```
+
+```python
+# Via Python SDK
+pip install catapult-sdk
+
+from catapult import Registry
+
+registry = Registry.from_env()
+model = registry.create_model(name="myorg/llama-3-8b", server_type="vllm")
+version = registry.create_version(model_name=model.name, version="1.0.0")
+```
+
+### Build & Deploy
+
+```python
+# Build a Docker image from a template
+build = registry.create_docker_build(
+    version_id=version.id,
+    template="vllm_gpu",
+    tag="myorg/llama-3-8b:1.0.0"
+)
+
+# Deploy it
+deployment = registry.create_deployment(
+    version_id=version.id,
+    image=build.image_tag,
+    environment="development",
+    gpu_count=1
+)
+
+# Benchmark it
+benchmark = registry.run_benchmark(
+    deployment_id=deployment.id,
+    benchmark_type="inference",
+    duration_seconds=60
+)
+```
+
+---
+
+## Python SDK
 
 ### Installation
 
 ```bash
-# From the repository
 cd sdk/python
 pip install -e .
 
 # Or from PyPI (when published)
 pip install catapult-sdk
-```
-
-### Basic Example
-
-```python
-from catapult import Registry
-
-# Initialize client
-registry = Registry(
-    base_url="http://localhost/api",
-    api_key="your-api-key"
-)
-
-# Create a model
-model = registry.create_model(
-    name="myorg/pytorch-model",
-    storage_path="docker.io/myorg/pytorch-model",
-    description="My PyTorch model"
-)
-
-# Create a version
-version = registry.create_version(
-    model_name="myorg/pytorch-model",
-    version="1.0.0",
-    tag="v1.0.0",
-    digest="sha256:abc123...",
-    metadata={
-        "pytorch_version": "2.1.0",
-        "accuracy": 0.95,
-        "git_commit": "abc123"
-    }
-)
-
-# Promote to official release
-registry.promote_version(version.id, is_release=True)
-
-# Record a deployment
-deployment = registry.deploy(
-    release_id=version.id,
-    environment="production",
-    metadata={"replicas": 3}
-)
-
-# Get latest version
-latest = registry.get_latest_version(
-    model_name="myorg/pytorch-model"
-)
-
-print(f"Latest version: {latest.version}")
 ```
 
 ### Integration with Training Scripts
@@ -184,7 +249,7 @@ version = registry.create_version(
     model_name="myorg/sentiment-model",
     version="2.1.0",
     tag="v2.1.0",
-    digest="sha256:...",  # From docker build
+    digest="sha256:...",
     metadata={
         "model_type": "BERT-base",
         "accuracy": accuracy,
@@ -197,181 +262,105 @@ version = registry.create_version(
 print(f"Registered version: {version.id}")
 ```
 
-## API Endpoints
+---
+
+## API Reference
 
 ### Health & Info
-- `GET /api/health` - Health check
-- `GET /api/v1/info` - API version and system info
+- `GET /api/health` — Health check
+- `GET /api/v1/info` — API version and system info
 
 ### Models
-- `GET /api/v1/models` - List models
-- `POST /api/v1/models` - Create model
-- `GET /api/v1/models/{id}` - Get model
-- `PUT /api/v1/models/{id}` - Update model
-- `DELETE /api/v1/models/{id}` - Delete model
-- `GET /api/v1/models/{id}/versions` - List versions for model
+- `GET /api/v1/models` — List models
+- `POST /api/v1/models` — Create model
+- `GET /api/v1/models/{id}` — Get model
+- `PUT /api/v1/models/{id}` — Update model
+- `DELETE /api/v1/models/{id}` — Delete model
 
 ### Versions
-- `POST /api/v1/versions` - Create version
-- `GET /api/v1/versions` - List versions (use `is_release=true` for official releases)
-- `GET /api/v1/versions/latest` - Get latest version
-- `GET /api/v1/versions/{id}` - Get version
-- `PUT /api/v1/versions/{id}` - Update version (including promote/demote via `is_release`)
-- `DELETE /api/v1/versions/{id}` - Delete version
-- `GET /api/v1/versions/{id}/deployments` - List deployments for version
+- `POST /api/v1/versions` — Create version
+- `GET /api/v1/versions` — List versions (use `is_release=true` for official releases)
+- `GET /api/v1/versions/latest` — Get latest version
+- `GET /api/v1/versions/{id}` — Get version
+- `PUT /api/v1/versions/{id}` — Update version (including promote/demote via `is_release`)
+- `DELETE /api/v1/versions/{id}` — Delete version
+- `GET /api/v1/versions/{id}/deployments` — List deployments for version
 
 ### Deployments
-- `POST /api/v1/deployments` - Record deployment
-- `GET /api/v1/deployments` - List deployments
-- `GET /api/v1/deployments/{id}` - Get deployment
+- `POST /api/v1/deployments` — Record / create deployment
+- `GET /api/v1/deployments` — List deployments
+- `GET /api/v1/deployments/{id}` — Get deployment
+
+### Docker Builds
+- `POST /api/v1/docker/builds` — Start a Docker build
+- `GET /api/v1/docker/builds` — List builds
+- `GET /api/v1/docker/builds/{id}` — Get build status
+- `GET /api/v1/docker/builds/{id}/logs/stream` — SSE log stream
+- `GET /api/v1/docker/templates/{type}` — Get Dockerfile template
+- `GET /api/v1/docker/disk-usage` — Docker disk usage
+
+### Benchmarks
+- `POST /api/v1/benchmarks` — Run benchmark (sync)
+- `POST /api/v1/benchmarks/async` — Run benchmark (async via Celery)
+- `GET /api/v1/benchmarks/{id}` — Get benchmark result
+- `GET /api/v1/benchmarks/deployment/{id}` — Benchmarks for a deployment
+- `GET /api/v1/benchmarks/deployment/{id}/summary` — Benchmark summary
+
+### Evaluations
+- `POST /api/v1/evaluations` — Run evaluation
+- `GET /api/v1/evaluations/{id}` — Get evaluation result
+- `GET /api/v1/evaluations/deployment/{id}` — Evaluations for a deployment
+
+### Artifacts
+- `GET /api/v1/artifacts` — List artifacts
+- `POST /api/v1/artifacts` — Upload artifact
 
 ### API Keys
-- `POST /api/v1/api-keys` - Create API key
-- `GET /api/v1/api-keys` - List API keys
-- `DELETE /api/v1/api-keys/{id}` - Revoke API key
+- `POST /api/v1/api-keys` — Create API key
+- `GET /api/v1/api-keys` — List API keys
+- `DELETE /api/v1/api-keys/{id}` — Revoke API key
 
 ### Audit Logs
-- `GET /api/v1/audit-logs` - List audit logs
+- `GET /api/v1/audit-logs` — List audit logs
 
-## Database Schema
+---
 
-The system uses 5 core tables:
+## Extending Catapult
 
-- **models**: ML models/images
-- **versions**: Model versions with metadata (can be promoted to official releases via `is_release` flag)
-- **deployments**: Deployment history
-- **api_keys**: Authentication keys
-- **audit_logs**: Operation history
+The architecture is designed for extensibility:
 
-See [PROJECT_DESIGN.md](PROJECT_DESIGN.md) for detailed schema documentation.
+- **Custom Dockerfile templates** — Drop a `Dockerfile.<name>` into `kb/dockers/` and it appears in the build UI
+- **Custom evaluators** — Implement the `BaseEvaluator` interface, register via factory, and your evaluation type is available across the platform
+- **Custom event handlers** — Subscribe to domain events to trigger external workflows (CI/CD, notifications, data pipelines)
+
+---
 
 ## Management Commands
 
-### Create API Key
 ```bash
+# Create API key
 docker-compose exec backend python scripts/create_api_key.py --name "my-key"
-```
 
-### View Logs
-```bash
-# All services
-docker-compose logs -f
-
-# Specific service
+# View logs
 docker-compose logs -f backend
 
-# Last 100 lines
-docker-compose logs --tail=100 backend
-```
-
-### Database Migrations
-```bash
 # Run migrations
 docker-compose exec backend alembic upgrade head
 
-# Create new migration
-docker-compose exec backend alembic revision --autogenerate -m "description"
-```
-
-### Backup Database
-```bash
+# Backup database
 docker-compose exec postgres pg_dump -U registry registry > backup.sql
-```
 
-### Restore Database
-```bash
+# Restore database
 docker-compose exec -T postgres psql -U registry registry < backup.sql
 ```
 
-## Testing
-
-### End-to-End Tests
-
-```bash
-# 1. Start the application
-docker-compose up -d
-
-# 2. Create a test API key
-TEST_KEY=$(docker-compose exec backend python scripts/create_api_key.py --name test-key | grep "Key:" | awk '{print $2}')
-
-# 3. Run tests
-export TEST_API_KEY=$TEST_KEY
-python tests/e2e_test.py
-```
-
-The test suite validates:
-- Health checks and connectivity
-- Model CRUD operations
-- Version creation and querying
-- Deployment tracking
-- API key management
-- Complete workflows (model → version → deployment)
-- Error handling (duplicates, not found, etc.)
-
-### Manual Testing with curl
-
-```bash
-# Health check
-curl http://localhost/api/health
-
-# List images (requires API key)
-curl -H "X-API-Key: your-key" http://localhost/api/v1/images
-
-# Create image
-curl -X POST http://localhost/api/v1/images \
-  -H "X-API-Key: your-key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "test-image",
-    "repository": "docker.io/org/test-image",
-    "description": "Test image"
-  }'
-```
-
-## Troubleshooting
-
-### Backend can't connect to database
-```bash
-# Check if postgres is running
-docker-compose ps postgres
-
-# Check logs
-docker-compose logs postgres
-
-# Verify connection
-docker-compose exec postgres psql -U registry -d registry -c "SELECT 1;"
-```
-
-### Frontend can't reach API
-```bash
-# Check nginx logs
-docker-compose logs nginx
-
-# Verify backend is healthy
-curl http://localhost/api/health
-
-# Check CORS settings in .env
-```
-
-### Storage path not accessible
-```bash
-# Verify mount on host
-ls -la $CEPH_MOUNT_PATH
-
-# Check permissions
-stat $CEPH_MOUNT_PATH
-
-# For testing, use local directory
-CEPH_MOUNT_PATH=/tmp/registry-storage
-```
+---
 
 ## Development
 
-### Local Development Setup
-
 ```bash
 # 1. Start database only
-docker-compose up -d postgres
+docker-compose up -d postgres redis
 
 # 2. Backend
 cd backend
@@ -391,48 +380,36 @@ cd sdk/python
 pip install -e .
 ```
 
-### Running Individual Services
+---
 
+## Troubleshooting
+
+### Backend can't connect to database
 ```bash
-# Backend only
-docker-compose up -d postgres
-docker-compose up backend
-
-# Frontend only
-cd frontend
-npm run dev
-
-# All except nginx
-docker-compose up -d postgres backend
+docker-compose ps postgres
+docker-compose logs postgres
+docker-compose exec postgres psql -U registry -d registry -c "SELECT 1;"
 ```
 
-## Production Deployment
+### Frontend can't reach API
+```bash
+docker-compose logs nginx
+curl http://localhost:8080/api/health
+```
 
-For production deployment:
+### Storage path not accessible
+```bash
+# Use local directory for development
+STORAGE_ROOT=./storage  # default — no external mount needed
+```
 
-1. **Use strong passwords** in `.env`
-2. **Enable HTTPS** by configuring SSL certificates in `infrastructure/nginx/ssl/`
-3. **Configure backup strategy** for PostgreSQL and Ceph storage
-4. **Set resource limits** in docker-compose.yml
-5. **Configure monitoring** (optional: add Prometheus/Grafana)
-6. **Use external Ceph mount** instead of local directory
-7. **Review security settings** in PROJECT_DESIGN.md
-
-## License
-
-MIT License - See LICENSE file for details.
-
-## Support
-
-- Documentation: See [PROJECT_DESIGN.md](PROJECT_DESIGN.md)
-- Issues: [GitHub Issues](https://github.com/warlockee/Catapult/issues)
-- API Docs: http://localhost/docs (when running)
+---
 
 ## Project Structure
 
 ```
 Catapult/
-├── backend/                # FastAPI backend
+├── backend/               # FastAPI backend
 │   ├── app/
 │   │   ├── api/           # API endpoints
 │   │   ├── core/          # Config, database, security
@@ -441,14 +418,42 @@ Catapult/
 │   │   └── services/      # Business logic
 │   ├── alembic/           # Database migrations
 │   └── scripts/           # Utility scripts
-├── frontend/                 # React frontend
+├── frontend/              # React frontend
 │   └── src/
 │       ├── components/    # React components
 │       └── lib/           # API client, utilities
 ├── sdk/python/            # Python SDK
 │   └── catapult/
+├── kb/dockers/            # 25+ Dockerfile templates
 ├── infrastructure/        # Nginx configs
 ├── tests/                 # E2E tests
 ├── docker-compose.yml     # Main deployment config
-└── deploy.sh             # Deployment script
+└── deploy.sh              # One-command deployment
 ```
+
+---
+
+## Roadmap
+
+- [ ] Kubernetes-native deployment mode
+- [ ] Multi-node distributed Docker builds
+- [ ] Model comparison and diff views
+- [ ] Webhook integrations (Slack, Discord, PagerDuty)
+- [ ] ONNX and TensorRT optimization pipeline
+- [ ] HuggingFace Hub bidirectional sync
+- [ ] Cost tracking per deployment
+- [ ] Web-based Dockerfile template editor
+
+---
+
+## Contributing
+
+We welcome contributions. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## License
+
+[Apache 2.0](LICENSE)
+
+---
+
+*Built by ML engineers who got tired of the gap between "model trained" and "model in production." We hope it saves you the same weeks it saved us.*
