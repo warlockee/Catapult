@@ -22,13 +22,13 @@ pip install -e .
 
 To use with Claude Desktop or Antigravity, add the following to your config file (`~/.config/Claude/claude_desktop_config.json`).
 
-**Important**: Use the **absolute path** to the `model-registry-mcp` executable to avoid PATH issues.
+**Important**: Use the **absolute path** to the `catapult-mcp` executable to avoid PATH issues.
 
 ```json
 {
   "mcpServers": {
-    "model-registry": {
-      "command": "/home/your-user/.local/bin/model-registry-mcp",
+    "catapult": {
+      "command": "/home/your-user/.local/bin/catapult-mcp",
       "env": {
         "REGISTRY_URL": "http://localhost/api",
         "REGISTRY_API_KEY": "your-api-key"

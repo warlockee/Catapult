@@ -1,4 +1,4 @@
-"""MCP Prompts for Model Registry."""
+"""MCP Prompts for Catapult."""
 
 from mcp.server.fastmcp import FastMCP
 

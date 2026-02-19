@@ -293,11 +293,11 @@ class BuildWorkspaceService:
         # Copy xcodec model
         xcodec_src = os.path.join(
             self.vllm_fork_path,
-            "boson_models/xcodec_tps25_0516_exp_1"
+            "models/xcodec_tps25_0516_exp_1"
         )
         xcodec_dest = os.path.join(
             build_dir,
-            "boson_models/xcodec_tps25_0516_exp_1"
+            "models/xcodec_tps25_0516_exp_1"
         )
         os.makedirs(os.path.dirname(xcodec_dest), exist_ok=True)
         if os.path.exists(xcodec_dest):

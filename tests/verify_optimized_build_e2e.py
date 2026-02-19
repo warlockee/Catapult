@@ -8,11 +8,10 @@ import subprocess
 from pathlib import Path
 
 # Configuration
-API_BASE_URL = "http://localhost/api/v1" # Adjusted port to 80 based on previous learnings (nginx proxy)
+API_BASE_URL = os.environ.get("TEST_BASE_URL", "http://localhost:8080/api/v1")
 STORAGE_DIR = "./storage/models"
-MODEL_NAME = "audio-multimodal" # Using the real model name for optimized build test
-# We use the existing storage path for this model if it exists, or simulated one
-REL_PATH = "audio-multimodal"
+MODEL_NAME = os.environ.get("TEST_MODEL_NAME", "test-optimized-model")
+REL_PATH = MODEL_NAME
 
 HEADERS = {"Content-Type": "application/json"}
 

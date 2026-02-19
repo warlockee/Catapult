@@ -1,4 +1,4 @@
-"""MCP Resources for Model Registry."""
+"""MCP Resources for Catapult."""
 
 from mcp.server.fastmcp import FastMCP
 
