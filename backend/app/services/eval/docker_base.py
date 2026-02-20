@@ -29,6 +29,19 @@ from app.services.eval.base import (
 
 logger = logging.getLogger(__name__)
 
+# Track running evaluation processes for cancellation support
+_running_processes: dict[str, asyncio.subprocess.Process] = {}
+
+
+def cancel_evaluation_process(evaluation_id: str) -> bool:
+    """Kill a running evaluation's Docker process."""
+    proc = _running_processes.get(evaluation_id)
+    if proc and proc.returncode is None:
+        logger.info(f"Killing eval Docker process for evaluation {evaluation_id}")
+        proc.kill()
+        return True
+    return False
+
 
 class DockerEvaluator(Evaluator):
     """
@@ -136,6 +149,7 @@ class DockerEvaluator(Evaluator):
         self,
         config: EvaluationConfig,
         progress_callback: Optional[ProgressCallback] = None,
+        evaluation_id: Optional[str] = None,
     ) -> EvaluationResult:
         """
         Run evaluation in Docker container.
@@ -183,6 +197,10 @@ class DockerEvaluator(Evaluator):
                 stderr=asyncio.subprocess.PIPE,
             )
 
+            # Track process for cancellation
+            if evaluation_id:
+                _running_processes[evaluation_id] = process
+
             stdout_lines = []
             stderr_text = ""
             total_samples = config.limit if config.limit > 0 else 500
@@ -214,10 +232,17 @@ class DockerEvaluator(Evaluator):
                     if line_text:
                         logger.info(f"[eval-docker] {line_text}")
 
-                    # Parse total samples from header if available
-                    total_match = re.search(r'(\d+) total samples', line_text)
-                    if total_match:
-                        total_samples = int(total_match.group(1))
+                    # Parse total samples from header — but only as fallback
+                    # when no explicit limit was set (the header shows dataset
+                    # size, not the actual evaluation count).
+                    if config.limit <= 0:
+                        total_match = re.search(r'(\d+) total samples', line_text)
+                        if total_match:
+                            total_samples = int(total_match.group(1))
+                    # Also parse "evaluating [0:N]" which is the real count
+                    eval_range_match = re.search(r'evaluating \[\d+:(\d+)\]', line_text)
+                    if eval_range_match:
+                        total_samples = int(eval_range_match.group(1))
 
                     # Parse progress updates
                     if progress_callback:
@@ -257,6 +282,10 @@ class DockerEvaluator(Evaluator):
                 await stderr_task
                 raise
 
+            # Clean up process tracking
+            if evaluation_id:
+                _running_processes.pop(evaluation_id, None)
+
             stdout_text = '\n'.join(stdout_lines)
             completed_at = datetime.utcnow()
             duration = (completed_at - started_at).total_seconds()
@@ -265,9 +294,12 @@ class DockerEvaluator(Evaluator):
             metrics_dict = self.parse_metrics(stdout_text)
 
             if process.returncode != 0:
+                # -9 = SIGKILL (cancelled)
+                msg = "Evaluation cancelled" if process.returncode == -9 else \
+                    f"Eval docker exited with code {process.returncode}: {stderr_text[:500]}"
                 return EvaluationResult(
                     success=False,
-                    error_message=f"Eval docker exited with code {process.returncode}: {stderr_text[:500]}",
+                    error_message=msg,
                     metrics=self._build_metrics(metrics_dict) if metrics_dict else None,
                     duration_seconds=duration,
                     started_at=started_at,
