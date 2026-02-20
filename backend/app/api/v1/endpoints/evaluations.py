@@ -177,6 +177,10 @@ async def cancel_evaluation(
     api_key: ApiKey = Depends(require_operator),
 ) -> EvaluationResponse:
     """Cancel a running evaluation."""
+    # Kill the Docker process if running
+    from app.services.eval.docker_base import cancel_evaluation_process
+    cancel_evaluation_process(str(evaluation_id))
+
     repo = EvaluationRepository(db)
     evaluation = await repo.mark_cancelled(evaluation_id)
     return EvaluationResponse.from_evaluation(evaluation)

@@ -13,6 +13,15 @@ from uuid import UUID
 import httpx
 
 from app.core.config import settings
+from app.services.api_discovery import (
+    build_sample_body,
+    detect_api_type_and_recommend,
+    extract_request_schema,
+    get_sample_request_body,
+    requires_file_upload as check_file_upload,
+    sort_endpoints_by_priority,
+    sort_paths_by_priority,
+)
 from app.core.exceptions import ContainerNotFoundError
 from app.services.deployment.executor_base import (
     ContainerStatus,
@@ -594,56 +603,6 @@ class LocalDeploymentExecutor(DeploymentExecutor):
             logger.debug(f"Health check failed for {health_url}: {e}")
             return False
 
-    def _get_sample_request_body(self, endpoint_path: str, model_name: str = "model") -> dict:
-        """Get a sample request body for probing an endpoint."""
-        path_lower = endpoint_path.lower()
-
-        if "/chat/completions" in path_lower:
-            return {
-                "model": model_name,
-                "messages": [{"role": "user", "content": "Hi"}],
-                "max_tokens": 1,
-                "stream": False,
-            }
-        elif "/completions" in path_lower and "/chat" not in path_lower:
-            return {
-                "model": model_name,
-                "prompt": "Hi",
-                "max_tokens": 1,
-                "stream": False,
-            }
-        elif "/embeddings" in path_lower:
-            return {
-                "model": model_name,
-                "input": "test",
-            }
-        elif "/audio/speech" in path_lower:
-            return {
-                "model": model_name,
-                "input": "Hello",
-                "voice": "alloy",
-            }
-        elif "/audio/transcriptions" in path_lower:
-            # Transcription requires file upload - can't probe properly
-            return {}
-        elif "/inference" in path_lower:
-            return {
-                "input": "test",
-                "parameters": {},
-            }
-        elif "/generate" in path_lower:
-            return {
-                "model": model_name,
-                "prompt": "Hi",
-                "max_tokens": 1,
-            }
-        elif "/predict" in path_lower:
-            return {
-                "input": "test",
-            }
-        else:
-            return {}
-
     async def discover_api_spec(
         self,
         endpoint_url: str,
@@ -660,13 +619,8 @@ class LocalDeploymentExecutor(DeploymentExecutor):
             timeout: Timeout in seconds for each probe
 
         Returns:
-            Dictionary with discovered API info:
-            {
-                "api_type": "openai" | "fastapi" | "generic",
-                "openapi_spec": {...} | None,
-                "endpoints": [{"method": "GET", "path": "/health", "description": "..."}],
-                "detected_endpoints": ["/health", "/v1/models", ...]
-            }
+            Dictionary with discovered API info including request_schema and
+            sample_body for each endpoint.
         """
         base_url = endpoint_url.rstrip('/')
         result = {
@@ -674,6 +628,7 @@ class LocalDeploymentExecutor(DeploymentExecutor):
             "openapi_spec": None,
             "endpoints": [],
             "detected_endpoints": [],
+            "recommended_benchmark_endpoint": None,
         }
 
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -698,58 +653,31 @@ class LocalDeploymentExecutor(DeploymentExecutor):
                         result["openapi_spec"] = spec
                         result["api_type"] = "fastapi"
 
-                        # Helper to detect if endpoint requires file upload
-                        def requires_file_upload(details: dict) -> bool:
-                            """Check if endpoint requires file upload based on OpenAPI spec."""
-                            request_body = details.get("requestBody", {})
-                            content = request_body.get("content", {})
-                            # Check for multipart/form-data content type
-                            if "multipart/form-data" in content:
-                                return True
-                            # Check for application/octet-stream
-                            if "application/octet-stream" in content:
-                                return True
-                            # Check schema for file/binary types
-                            for content_type, content_spec in content.items():
-                                schema = content_spec.get("schema", {})
-                                # Check if schema has file-related format
-                                if schema.get("format") in ["binary", "byte"]:
-                                    return True
-                                # Check properties for file fields
-                                properties = schema.get("properties", {})
-                                for prop_name, prop_spec in properties.items():
-                                    if prop_spec.get("type") == "string" and prop_spec.get("format") in ["binary", "byte"]:
-                                        return True
-                                    if prop_name.lower() in ["file", "files", "audio", "image", "video"]:
-                                        return True
-                            return False
-
                         # Extract endpoints from OpenAPI spec and probe each one
                         paths = spec.get("paths", {})
                         for endpoint_path, methods in paths.items():
                             for method, details in methods.items():
                                 if method.upper() in ["GET", "POST", "PUT", "DELETE", "PATCH"]:
-                                    # Check if endpoint requires file upload
-                                    needs_file_upload = requires_file_upload(details)
-                                    # Probe the endpoint to get actual response
+                                    needs_file_upload = check_file_upload(endpoint_path, details)
+                                    # Extract schema and generate sample body
+                                    request_schema = extract_request_schema(details, spec) if method.upper() != "GET" else None
+                                    sample_body = build_sample_body(endpoint_path, model_name, details, spec) if method.upper() != "GET" else None
+
+                                    # Probe the endpoint
                                     try:
                                         if method.upper() == "GET":
                                             probe_response = await client.get(f"{base_url}{endpoint_path}")
                                         else:
-                                            # Use appropriate request body for the endpoint
-                                            request_body = self._get_sample_request_body(endpoint_path, model_name)
                                             probe_response = await client.request(
                                                 method.upper(),
                                                 f"{base_url}{endpoint_path}",
-                                                json=request_body
+                                                json=sample_body or {}
                                             )
 
-                                        # Skip endpoints that don't work (404 or 400)
                                         if probe_response.status_code in [404, 400]:
                                             logger.debug(f"Endpoint {endpoint_path} returned {probe_response.status_code}, skipping")
                                             continue
 
-                                        # Capture actual response data
                                         response_data = None
                                         try:
                                             response_data = probe_response.json()
@@ -766,12 +694,13 @@ class LocalDeploymentExecutor(DeploymentExecutor):
                                             "status": probe_response.status_code,
                                             "response": response_data,
                                             "requires_file_upload": needs_file_upload,
+                                            "request_schema": request_schema,
+                                            "sample_body": sample_body,
                                         })
                                         result["detected_endpoints"].append(endpoint_path)
 
                                     except Exception as e:
                                         logger.debug(f"Failed to probe {endpoint_path}: {e}")
-                                        # Still include endpoint but without response data
                                         result["endpoints"].append({
                                             "method": method.upper(),
                                             "path": endpoint_path,
@@ -781,104 +710,58 @@ class LocalDeploymentExecutor(DeploymentExecutor):
                                             "status": None,
                                             "response": None,
                                             "requires_file_upload": needs_file_upload,
+                                            "request_schema": request_schema,
+                                            "sample_body": sample_body,
                                         })
                                         result["detected_endpoints"].append(endpoint_path)
 
-                        # Sort endpoints by priority: important APIs first
-                        def endpoint_priority(ep):
-                            p = ep["path"].lower()
-                            # Priority 1: Core OpenAI-compatible endpoints
-                            if p == "/v1/chat/completions":
-                                return (0, p)
-                            if p == "/v1/completions":
-                                return (1, p)
-                            if p == "/v1/models":
-                                return (2, p)
-                            if p == "/v1/embeddings":
-                                return (3, p)
-                            # Priority 2: Other v1 endpoints
-                            if p.startswith("/v1/"):
-                                return (10, p)
-                            # Priority 3: Health/status
-                            if p in ["/health", "/healthz", "/ready"]:
-                                return (20, p)
-                            # Priority 4: Common inference endpoints
-                            if any(k in p for k in ["/generate", "/inference", "/predict"]):
-                                return (30, p)
-                            # Priority 5: Info endpoints
-                            if p in ["/version", "/metrics", "/info"]:
-                                return (40, p)
-                            # Everything else
-                            return (100, p)
-
-                        result["endpoints"].sort(key=endpoint_priority)
-
-                        # Also detect if this is OpenAI-compatible
-                        openai_paths = {"/v1/chat/completions", "/v1/completions", "/v1/models"}
-                        if openai_paths.intersection(set(result["detected_endpoints"])):
-                            result["api_type"] = "openai"
-
-                        # Set recommended benchmark endpoint (file uploads now supported by benchmarker)
-                        # Exclude batch endpoints due to compatibility issues
-                        for ep in result["endpoints"]:
-                            if ep["method"] == "POST":
-                                if not ep["path"].startswith("/health") and ep["path"] != "/metrics" and "/batch" not in ep["path"]:
-                                    result["recommended_benchmark_endpoint"] = ep["path"]
-                                    break
+                        # Sort, detect type, recommend
+                        result["endpoints"] = sort_endpoints_by_priority(result["endpoints"])
+                        result["detected_endpoints"] = sort_paths_by_priority(result["detected_endpoints"])
+                        result["api_type"], result["recommended_benchmark_endpoint"] = \
+                            detect_api_type_and_recommend(result["detected_endpoints"], result["endpoints"])
 
                         logger.info(f"Discovered OpenAPI spec from {path} with {len(result['endpoints'])} endpoints")
                         return result
                 except Exception as e:
                     logger.debug(f"Failed to fetch {path}: {e}")
 
-            # Probe common endpoints to detect API type
-            # Format: (path, method, api_type, description, requires_file_upload)
+            # Fallback: Probe common endpoints
             probe_endpoints = [
-                # OpenAI/vLLM compatible
-                ("/v1/models", "GET", "openai", "List available models", False),
-                ("/v1/chat/completions", "POST", "openai", "Chat completions", False),
-                ("/v1/completions", "POST", "openai", "Text completions", False),
-                ("/v1/embeddings", "POST", "openai", "Generate embeddings", False),
-                # Health/status
-                ("/health", "GET", None, "Health check", False),
-                ("/healthz", "GET", None, "Health check", False),
-                ("/ready", "GET", None, "Readiness check", False),
-                ("/", "GET", None, "Root endpoint", False),
-                # Common API patterns
-                ("/predict", "POST", None, "Model prediction", False),
-                ("/inference", "POST", None, "Model inference", False),
-                ("/generate", "POST", None, "Text generation", False),
-                # Audio APIs (typically require file uploads)
-                ("/synthesize", "POST", "audio", "Text-to-speech", False),
-                ("/transcribe", "POST", "audio", "Speech-to-text", True),
-                ("/transcribe/batch", "POST", "audio", "Batch speech-to-text", True),
-                ("/tts", "POST", "audio", "Text-to-speech", False),
-                ("/stt", "POST", "audio", "Speech-to-text", True),
-                # Info endpoints
-                ("/info", "GET", None, "Model info", False),
-                ("/version", "GET", None, "Version info", False),
-                ("/metrics", "GET", None, "Prometheus metrics", False),
+                ("/v1/models", "GET", "List available models", False),
+                ("/v1/chat/completions", "POST", "Chat completions", False),
+                ("/v1/completions", "POST", "Text completions", False),
+                ("/v1/embeddings", "POST", "Generate embeddings", False),
+                ("/health", "GET", "Health check", False),
+                ("/healthz", "GET", "Health check", False),
+                ("/ready", "GET", "Readiness check", False),
+                ("/", "GET", "Root endpoint", False),
+                ("/predict", "POST", "Model prediction", False),
+                ("/inference", "POST", "Model inference", False),
+                ("/generate", "POST", "Text generation", False),
+                ("/synthesize", "POST", "Text-to-speech", False),
+                ("/transcribe", "POST", "Speech-to-text", True),
+                ("/transcribe/batch", "POST", "Batch speech-to-text", True),
+                ("/tts", "POST", "Text-to-speech", False),
+                ("/stt", "POST", "Speech-to-text", True),
+                ("/info", "GET", "Model info", False),
+                ("/version", "GET", "Version info", False),
+                ("/metrics", "GET", "Prometheus metrics", False),
             ]
 
-            detected_api_type = None
-            for path, method, api_type, description, needs_file_upload in probe_endpoints:
+            for path, method, description, needs_file_upload in probe_endpoints:
                 try:
+                    sample_body = get_sample_request_body(path, model_name) if method == "POST" else None
                     if method == "GET":
                         response = await client.get(f"{base_url}{path}")
                     else:
-                        # Use appropriate request body for the endpoint
-                        request_body = self._get_sample_request_body(path, model_name)
-                        response = await client.post(f"{base_url}{path}", json=request_body)
+                        response = await client.post(f"{base_url}{path}", json=sample_body or {})
 
-                    # Consider endpoint works if we get a valid response
-                    # Skip 404 (not found) and 400 (bad request - endpoint doesn't support this)
-                    if response.status_code in [200, 201, 405, 422, 500]:
-                        # Try to capture actual response data
+                    if response.status_code not in [404, 400]:
                         response_data = None
                         try:
                             response_data = response.json()
                         except Exception:
-                            # Response might not be JSON
                             if response.text:
                                 response_data = {"raw": response.text[:500]}
 
@@ -887,28 +770,23 @@ class LocalDeploymentExecutor(DeploymentExecutor):
                             "method": method,
                             "path": path,
                             "summary": description,
-                            "description": description,
+                            "description": "",
                             "tags": [],
                             "status": response.status_code,
                             "response": response_data,
                             "requires_file_upload": needs_file_upload,
+                            "request_schema": None,
+                            "sample_body": sample_body,
                         })
-                        if api_type and not detected_api_type:
-                            detected_api_type = api_type
 
                 except Exception as e:
                     logger.debug(f"Probe failed for {method} {path}: {e}")
 
-            if detected_api_type:
-                result["api_type"] = detected_api_type
-
-            # Set recommended benchmark endpoint (first POST endpoint, file uploads now supported)
-            # Exclude batch endpoints due to compatibility issues
-            for ep in result["endpoints"]:
-                if ep["method"] == "POST":
-                    if not ep["path"].startswith("/health") and ep["path"] != "/metrics" and "/batch" not in ep["path"]:
-                        result["recommended_benchmark_endpoint"] = ep["path"]
-                        break
+            # Sort, detect type, recommend
+            result["endpoints"] = sort_endpoints_by_priority(result["endpoints"])
+            result["detected_endpoints"] = sort_paths_by_priority(result["detected_endpoints"])
+            result["api_type"], result["recommended_benchmark_endpoint"] = \
+                detect_api_type_and_recommend(result["detected_endpoints"], result["endpoints"])
 
             logger.info(f"Probed container, detected {len(result['endpoints'])} endpoints, type: {result['api_type']}")
 

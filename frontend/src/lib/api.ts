@@ -573,6 +573,8 @@ export interface ApiEndpoint {
   status?: number;  // HTTP status from probing
   response?: Record<string, any> | null;  // Actual API response data
   requires_file_upload?: boolean;  // True if endpoint requires file upload (multipart/form-data)
+  request_schema?: Record<string, any> | null;  // JSON schema for request body (from OpenAPI)
+  sample_body?: Record<string, any> | null;  // Generated sample request body
 }
 
 export interface ApiDiscoveryResult {

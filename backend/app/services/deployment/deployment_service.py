@@ -575,6 +575,7 @@ class DeploymentService:
             from app.services.benchmark_service import get_inference_endpoint
 
             endpoint_path = "/v1/chat/completions"  # Default
+            method = "POST"
             request_body = None
 
             # Try to get server_type from deployment -> release -> model
@@ -589,7 +590,7 @@ class DeploymentService:
                     )
                     model = result.scalar_one_or_none()
                     if model and model.server_type:
-                        endpoint_path, _, request_body = get_inference_endpoint(model.server_type)
+                        endpoint_path, method, request_body = get_inference_endpoint(model.server_type)
                         logger.info(f"Auto-benchmark using endpoint {endpoint_path} for server_type {model.server_type}")
 
             # Create benchmark record for full verification suite
@@ -600,7 +601,7 @@ class DeploymentService:
                 db,
                 deployment_id=deployment.id,
                 endpoint_path=endpoint_path,
-                method="POST",
+                method=method,
                 concurrent_requests=5,  # Stress test concurrency
                 total_requests=20,  # Stress test total requests
                 timeout_seconds=60.0,

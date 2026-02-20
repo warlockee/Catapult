@@ -23,6 +23,16 @@ export function getApiTypeLabel(apiType: string): string {
   }
 }
 
+function getStatusBadge(status: number): { className: string; label: string } {
+  if (status >= 200 && status < 300) {
+    return { className: 'bg-green-100 text-green-700', label: String(status) };
+  }
+  if (status === 422 || status === 405) {
+    return { className: 'bg-amber-100 text-amber-700', label: String(status) };
+  }
+  return { className: 'bg-red-100 text-red-700', label: String(status) };
+}
+
 export function DiscoveredAPIsSection({
   apiSpec,
   apiSpecLoading,
@@ -87,7 +97,9 @@ export function DiscoveredAPIsSection({
               )}
 
               {apiSpec.endpoints.map((endpoint, index) => {
-                const curlExample = generateCurlExample(endpointUrl || '', endpoint.method, endpoint.path, modelName);
+                const curlExample = generateCurlExample(endpointUrl || '', endpoint.method, endpoint.path, modelName, endpoint.sample_body, endpoint.requires_file_upload, endpoint.request_schema);
+                const statusBadge = endpoint.status ? getStatusBadge(endpoint.status) : null;
+                const isValidationError = endpoint.status === 422;
                 return (
                   <div key={index} className="border rounded-lg p-5 hover:bg-gray-50 transition-colors w-full min-w-0">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3">
@@ -129,18 +141,24 @@ export function DiscoveredAPIsSection({
                       {/* Response below */}
                       <div>
                         <div className="text-xs text-gray-500 font-medium mb-1 uppercase tracking-wider">
-                          Response {endpoint.status && (
-                            <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                              endpoint.status >= 200 && endpoint.status < 300
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-red-100 text-red-700'
-                            }`}>
-                              {endpoint.status}
+                          Response {statusBadge && (
+                            <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium ${statusBadge.className}`}>
+                              {statusBadge.label}
+                            </span>
+                          )}
+                          {isValidationError && (
+                            <span className="ml-2 text-[10px] text-amber-600">
+                              Endpoint available — probe request had validation errors
                             </span>
                           )}
                         </div>
                         <div className="relative group w-full min-w-0">
-                          {endpoint.response ? (
+                          {isValidationError && endpoint.requires_file_upload ? (
+                            <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg text-xs text-amber-700">
+                              This endpoint requires a file upload (multipart/form-data) and cannot be probed with JSON.
+                              Use the cURL example above to test it.
+                            </div>
+                          ) : endpoint.response ? (
                             <pre className="bg-gray-50 border p-4 rounded-lg overflow-x-auto text-xs font-mono w-full min-w-0 max-h-48">
                               {JSON.stringify(endpoint.response, null, 2)}
                             </pre>
@@ -149,7 +167,7 @@ export function DiscoveredAPIsSection({
                               No sample response available
                             </div>
                           )}
-                          {endpoint.response && (
+                          {endpoint.response && !(isValidationError && endpoint.requires_file_upload) && (
                             <Button
                               variant="secondary"
                               size="sm"
