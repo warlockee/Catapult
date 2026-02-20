@@ -40,7 +40,15 @@ def get_inference_endpoint(server_type: str) -> tuple[str, str, dict]:
     """
     server_type_lower = (server_type or "").lower()
 
-    if server_type_lower == "audio-generation":
+    if server_type_lower in ("asr-allinone", "asr-azure-allinone"):
+        # ASR all-in-one services only expose /transcribe (file upload) and /health.
+        # They cannot be benchmarked with JSON — use /health for basic load test.
+        return (
+            "/health",
+            "GET",
+            {}
+        )
+    elif server_type_lower == "audio-generation":
         # TTS models use /v1/audio/speech
         return (
             "/v1/audio/speech",
@@ -111,7 +119,7 @@ def detect_model_type(model_id: str, server_type: Optional[str] = None) -> Model
     # server_type is authoritative - use it first
     if server_type:
         server_type_lower = server_type.lower()
-        if server_type_lower in ('audio-generation', 'audio-understanding', 'tts', 'asr', 'asr-vllm'):
+        if server_type_lower in ('audio-generation', 'audio-understanding', 'tts', 'asr', 'asr-vllm', 'asr-allinone', 'asr-azure-allinone'):
             return ModelType.AUDIO
         if server_type_lower in ('embedding', 'embeddings'):
             return ModelType.TEXT  # Embeddings are non-streaming like audio

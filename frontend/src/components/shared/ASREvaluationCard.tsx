@@ -11,6 +11,7 @@ interface ASREvaluationCardProps {
   asrEvalLimit: number;
   onLimitChange: (limit: number) => void;
   onRunEvaluation: () => void;
+  onCancelEvaluation?: () => void;
 }
 
 export function ASREvaluationCard({
@@ -21,6 +22,7 @@ export function ASREvaluationCard({
   asrEvalLimit,
   onLimitChange,
   onRunEvaluation,
+  onCancelEvaluation,
 }: ASREvaluationCardProps) {
   const hasWerData = evaluationSummary?.wer !== null && evaluationSummary?.wer !== undefined;
 
@@ -49,6 +51,17 @@ export function ASREvaluationCard({
               </p>
             )}
             <p className="text-xs text-gray-500 mt-2">This may take a while for large datasets</p>
+            {onCancelEvaluation && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onCancelEvaluation}
+                className="mt-4 border-red-200 text-red-600 hover:bg-red-50"
+              >
+                <StopCircle className="size-3 mr-2" />
+                Stop Evaluation
+              </Button>
+            )}
           </div>
         ) : hasWerData ? (
           /* Has WER data */

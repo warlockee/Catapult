@@ -137,12 +137,9 @@ export function DeploymentDetail() {
     },
   });
 
-  // Cancel evaluation mutation (evaluations don't have cancel endpoint yet, so just stop polling)
+  // Cancel evaluation mutation
   const cancelEvaluationMutation = useMutation({
-    mutationFn: async (id: string) => {
-      // Evaluations run in docker container - just stop polling for now
-      return Promise.resolve();
-    },
+    mutationFn: (id: string) => api.cancelEvaluation(id),
     onSuccess: () => {
       setEvaluationRunning(false);
       setActiveEvaluationId(null);
@@ -715,6 +712,7 @@ export function DeploymentDetail() {
           asrEvalLimit={asrEvalLimit}
           onLimitChange={setAsrEvalLimit}
           onRunEvaluation={() => runEvaluationMutation.mutate()}
+          onCancelEvaluation={activeEvaluationId ? () => cancelEvaluationMutation.mutate(activeEvaluationId) : undefined}
         />
       </section>
 
