@@ -131,6 +131,7 @@ class Evaluator(ABC):
         self,
         config: EvaluationConfig,
         progress_callback: Optional[ProgressCallback] = None,
+        evaluation_id: Optional[str] = None,
     ) -> EvaluationResult:
         """
         Run evaluation against the configured endpoint.
@@ -138,6 +139,7 @@ class Evaluator(ABC):
         Args:
             config: Evaluation configuration
             progress_callback: Optional async callback(current, total) for progress
+            evaluation_id: Optional ID for cancellation support
 
         Returns:
             EvaluationResult with metrics or error

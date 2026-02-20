@@ -121,7 +121,11 @@ class EvaluationService:
                 language=language,
             )
 
-            result = await evaluator.evaluate(config, progress_callback=eval_progress)
+            result = await evaluator.evaluate(
+                config,
+                progress_callback=eval_progress,
+                evaluation_id=str(evaluation.id) if evaluation else None,
+            )
 
             # Update Evaluation record with results
             self._update_evaluation_from_result(evaluation, result)

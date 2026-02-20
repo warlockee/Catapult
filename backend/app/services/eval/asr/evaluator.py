@@ -265,6 +265,7 @@ class ASRWERCEREvaluator(Evaluator):
         self,
         config: EvaluationConfig,
         progress_callback: Optional[ProgressCallback] = None,
+        evaluation_id: Optional[str] = None,
     ) -> EvaluationResult:
         """
         Run WER/CER evaluation on an Arrow dataset.
