@@ -180,10 +180,10 @@ services:
       - ${WORKSPACE_PATH:-./storage/workspace}/vllm_wheels_prebuilt:/fsx/vllm_wheels_prebuilt:ro
       # User workspace files (read-only, for registering existing artifacts)
       - ${WORKSPACE_PATH:-./storage/workspace}:/fsx/workspace:ro
-      # ASR evaluation datasets
-      - /fsx/data:/fsx/data:ro
-      # HuggingFace cache for offline ASR builds
-      - /fsx/hf_cache:/fsx/hf_cache:ro
+      # ASR evaluation datasets (optional - set ASR_DATA_PATH in .env)
+      - ${ASR_DATA_PATH:-./storage/data}:/fsx/data:ro
+      # HuggingFace cache for offline ASR builds (optional - set HF_CACHE_PATH in .env)
+      - ${HF_CACHE_PATH:-./storage/hf_cache}:/fsx/hf_cache:ro
       # Docker socket for building images
       - /var/run/docker.sock:/var/run/docker.sock
       # Shared logs
@@ -192,8 +192,8 @@ services:
       - ./backend:/app
       # Docker templates (same as backend)
       - ./kb/dockers:/app/kb/dockers:ro
-      # SSH keys for Git access (ASR-vLLM builds clone from GitHub)
-      - /root/.ssh:/root/.ssh:ro
+      # SSH keys for Git access (optional - uncomment if ASR-vLLM builds need to clone private repos)
+      # - ~/.ssh:/root/.ssh:ro
     depends_on:
       postgres:
         condition: service_healthy

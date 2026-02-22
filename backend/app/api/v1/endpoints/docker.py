@@ -62,7 +62,8 @@ async def create_build(
         artifact_ids=build_data.artifact_ids,
         image_tag=build_data.image_tag,
         build_type=build_data.build_type,
-        dockerfile_content=build_data.dockerfile_content
+        dockerfile_content=build_data.dockerfile_content,
+        build_args=build_data.build_args,
     )
 
     await create_audit_log(

@@ -85,6 +85,7 @@ ENV TENSOR_PARALLEL=1
 ENV DTYPE=auto
 ENV MAX_MODEL_LEN=""
 ENV EXTRA_ARGS=""
+ENV TRUST_REMOTE_CODE=""
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
@@ -118,6 +119,7 @@ ENTRYPOINT ["/bin/bash", "-c", "\
     ARGS=\"${ARGS} --tensor-parallel-size ${TENSOR_PARALLEL}\";\n\
     ARGS=\"${ARGS} --dtype ${DTYPE}\";\n\
     if [ -n \"${MAX_MODEL_LEN}\" ]; then ARGS=\"${ARGS} --max-model-len ${MAX_MODEL_LEN}\"; fi;\n\
+    if [ -n \"${TRUST_REMOTE_CODE}\" ]; then ARGS=\"${ARGS} --trust-remote-code\"; fi;\n\
     if [ -n \"${EXTRA_ARGS}\" ]; then ARGS=\"${ARGS} ${EXTRA_ARGS}\"; fi;\n\
     \n\
     echo \"Running: python3 -m vllm.entrypoints.openai.api_server ${ARGS}\";\n\

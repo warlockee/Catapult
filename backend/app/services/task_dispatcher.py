@@ -65,6 +65,12 @@ class TaskDispatcherProtocol(Protocol):
         """Dispatch a deployment health check task."""
         ...
 
+    def dispatch_model_preprocessing(
+        self, model_id: UUID, image: str, command_json: str, mounts_json: str, gpu: bool = False
+    ) -> Optional[str]:
+        """Dispatch a model preprocessing task."""
+        ...
+
 
 class CeleryTaskDispatcher:
     """
@@ -251,6 +257,18 @@ class CeleryTaskDispatcher:
             logger.error(f"Failed to dispatch health check task: {e}")
             return None
 
+    def dispatch_model_preprocessing(
+        self, model_id: UUID, image: str, command_json: str, mounts_json: str, gpu: bool = False
+    ) -> Optional[str]:
+        try:
+            from app.worker import model_preprocessing_task
+            result = model_preprocessing_task.delay(str(model_id), image, command_json, mounts_json, gpu)
+            logger.info(f"Dispatched preprocessing task for model {model_id}: {result.id}")
+            return result.id
+        except Exception as e:
+            logger.error(f"Failed to dispatch preprocessing task: {e}")
+            return None
+
 
 class NoOpTaskDispatcher:
     """
@@ -298,6 +316,12 @@ class NoOpTaskDispatcher:
     def dispatch_health_check(self) -> Optional[str]:
         logger.debug("NoOp: dispatch_health_check()")
         return "noop-health-check"
+
+    def dispatch_model_preprocessing(
+        self, model_id: UUID, image: str, command_json: str, mounts_json: str, gpu: bool = False
+    ) -> Optional[str]:
+        logger.debug(f"NoOp: dispatch_model_preprocessing({model_id})")
+        return f"noop-preprocessing-{model_id}"
 
 
 def _create_dispatcher() -> TaskDispatcherProtocol:

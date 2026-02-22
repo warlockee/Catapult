@@ -102,6 +102,7 @@ class DockerService:
         artifact_id: uuid.UUID = None,
         artifact_ids: list[uuid.UUID] = None,
         dockerfile_content: str = None,
+        build_args: dict[str, str] = None,
     ) -> DockerBuild:
         """
         Create a Docker build record.
@@ -114,6 +115,7 @@ class DockerService:
             artifact_id: Legacy single artifact ID
             artifact_ids: List of artifact IDs
             dockerfile_content: Custom Dockerfile content
+            build_args: Custom Docker build arguments
 
         Returns:
             Created DockerBuild record
@@ -127,6 +129,7 @@ class DockerService:
             image_tag=validated_tag,
             build_type=build_type,
             dockerfile_content=dockerfile_content,
+            build_args=build_args,
             status="pending"
         )
         db.add(build)
@@ -291,6 +294,10 @@ class DockerService:
                 build_args["MODEL_NAME"] = model_name
                 if primary_wheel:
                     build_args["VLLM_PRECOMPILED_WHEEL_LOCATION"] = primary_wheel
+
+                # Merge user-supplied build args (override defaults)
+                if build.build_args:
+                    build_args.update(build.build_args)
 
                 build_command = BuildCommand(
                     image_tag=build.image_tag,
