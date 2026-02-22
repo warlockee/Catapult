@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timedelta
 
 from sqlalchemy import ARRAY, Column, DateTime, ForeignKey, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -27,6 +27,7 @@ class DockerBuild(Base):
     completed_at = Column(DateTime(timezone=True), nullable=True)
     error_message = Column(Text, nullable=True)
     dockerfile_content = Column(Text, nullable=True)
+    build_args = Column(JSONB, nullable=True)  # Custom build args from user
     server_type = Column(String(50), nullable=True)  # Detected or explicit server type
     celery_task_id = Column(String(50), nullable=True)
     # GC tracking columns

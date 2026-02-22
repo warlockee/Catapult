@@ -49,6 +49,7 @@ class DockerBuildBase(BaseModel):
     image_tag: str
     build_type: str  # organic, azure, test, optimized
     dockerfile_content: Optional[str] = None
+    build_args: Optional[dict[str, str]] = None
 
 
 class DockerBuildCreate(DockerBuildBase):
