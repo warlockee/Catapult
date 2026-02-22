@@ -86,6 +86,14 @@ def detect_server_type_from_files(model_path: str) -> Tuple[str, str]:
             if any("HiggsAudio" in arch for arch in architectures):
                 return "asr-vllm", f"detected audio architecture: {architectures}"
 
+            # HiggsMultimodalQwen3 (higgs-mm converted checkpoints)
+            if model_type == "higgs_multimodal_qwen3":
+                audio_enc = config.get("audio_encoder_config", {})
+                enc_type = audio_enc.get("encoder_type", "whisper")
+                if enc_type == "whisper":
+                    return "asr-vllm", "HiggsMultimodalQwen3 Whisper encoder (ASR)"
+                return "vllm", f"HiggsMultimodalQwen3 {enc_type} encoder (TTS)"
+
             # Whisper/ASR models - return specific "whisper" type
             whisper_model_types = {"whisper"}
             if model_type in whisper_model_types:

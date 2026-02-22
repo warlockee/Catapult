@@ -297,6 +297,7 @@ def upgrade() -> None:
         sa.Column('completed_at', sa.DateTime(timezone=True), nullable=True),
         sa.Column('error_message', sa.Text(), nullable=True),
         sa.Column('dockerfile_content', sa.Text(), nullable=True),
+        sa.Column('build_args', postgresql.JSONB(), nullable=True),
         sa.Column('server_type', sa.String(50), nullable=True),
         sa.Column('celery_task_id', sa.String(255), nullable=True),
         sa.Column('superseded_at', sa.DateTime(timezone=True), nullable=True),

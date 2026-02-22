@@ -529,3 +529,65 @@ def run_benchmark_task(benchmark_id: str):
     except Exception as e:
         logger.error(f"Benchmark task for {benchmark_id} failed: {e}")
         return f"Benchmark {benchmark_id} failed: {e}"
+
+
+# =============================================================================
+# Model Preprocessing Tasks
+# =============================================================================
+
+@celery_app.task(acks_late=True)
+def model_preprocessing_task(model_id: str, image: str, command_json: str, mounts_json: str, gpu: bool = False):
+    """
+    Celery task to run model preprocessing via Docker container.
+
+    Args:
+        model_id: UUID of the model being preprocessed
+        image: Docker image to run
+        command_json: JSON-serialized command list
+        mounts_json: JSON-serialized mounts dict
+        gpu: Whether to allocate GPU
+    """
+    logger.info(f"Starting preprocessing task for model {model_id}")
+    try:
+        command = json.loads(command_json)
+        mounts = json.loads(mounts_json)
+
+        async def run_preprocess(db):
+            from app.models.model import Model
+            from app.services.preprocessing_service import preprocessing_service
+
+            model = await db.get(Model, UUID(model_id))
+            if not model:
+                logger.error(f"Model {model_id} not found")
+                return
+
+            result = await preprocessing_service.run(
+                job_id=model_id,
+                image=image,
+                command=command,
+                mounts=mounts,
+                gpu=gpu,
+            )
+
+            # Update model metadata with preprocessing result
+            if not model.meta_data:
+                model.meta_data = {}
+            new_meta = dict(model.meta_data)
+            new_meta["preprocessing"] = {
+                "status": "completed" if result.success else "failed",
+                "log_path": result.log_path,
+                "error": result.error_message,
+            }
+            model.meta_data = new_meta
+            await db.commit()
+
+            if not result.success:
+                raise Exception(f"Preprocessing failed: {result.error_message}")
+
+        run_async_with_db(run_preprocess)
+
+        logger.info(f"Preprocessing task for model {model_id} completed")
+        return f"Preprocessing for model {model_id} completed"
+    except Exception as e:
+        logger.error(f"Preprocessing task for model {model_id} failed: {e}")
+        return f"Preprocessing for model {model_id} failed: {e}"

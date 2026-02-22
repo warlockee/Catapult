@@ -13,16 +13,18 @@ from uuid import UUID
 import httpx
 
 from app.core.config import settings
+from app.core.exceptions import ContainerNotFoundError
 from app.services.api_discovery import (
     build_sample_body,
     detect_api_type_and_recommend,
     extract_request_schema,
     get_sample_request_body,
-    requires_file_upload as check_file_upload,
     sort_endpoints_by_priority,
     sort_paths_by_priority,
 )
-from app.core.exceptions import ContainerNotFoundError
+from app.services.api_discovery import (
+    requires_file_upload as check_file_upload,
+)
 from app.services.deployment.executor_base import (
     ContainerStatus,
     DeploymentConfig,

@@ -3,6 +3,7 @@ API endpoints for models.
 
 Uses ModelRepository for data access and domain exceptions for error handling.
 """
+import json
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, status
@@ -15,8 +16,10 @@ from app.repositories.model_repository import ModelRepository
 from app.repositories.version_repository import VersionRepository
 from app.schemas.model import ModelCreate, ModelOption, ModelResponse, ModelUpdate, ModelWithVersions
 from app.schemas.pagination import PaginatedResponse
+from app.schemas.preprocessing import PreprocessingRequest, PreprocessingResponse
 from app.schemas.version import VersionResponse
 from app.services.audit_service import create_audit_log
+from app.services.task_dispatcher import task_dispatcher
 
 router = APIRouter()
 
@@ -215,3 +218,46 @@ async def list_model_versions(
     versions, total = await version_repo.list_by_model_id(model_id, page=page, size=size)
 
     return PaginatedResponse.create(items=versions, total=total, page=page, size=size)
+
+
+@router.post("/{model_id}/preprocess", response_model=PreprocessingResponse)
+async def preprocess_model(
+    model_id: UUID,
+    req: PreprocessingRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    api_key: ApiKey = Depends(require_operator),
+) -> PreprocessingResponse:
+    """
+    Run a preprocessing step on model files via Docker container.
+    Requires operator role.
+
+    Raises:
+        ModelNotFoundError: If model not found (404)
+    """
+    repo = ModelRepository(db)
+    await repo.get_by_id_or_raise(model_id)
+
+    task_id = task_dispatcher.dispatch_model_preprocessing(
+        model_id=model_id,
+        image=req.image,
+        command_json=json.dumps(req.command),
+        mounts_json=json.dumps(req.mounts),
+        gpu=req.gpu,
+    )
+
+    if not task_id:
+        return PreprocessingResponse(status="error", message="Failed to dispatch preprocessing task")
+
+    await create_audit_log(
+        db=db,
+        action="preprocess_model",
+        resource_type="model",
+        resource_id=model_id,
+        api_key_name=api_key.name,
+        api_key_id=api_key.id,
+        details={"image": req.image, "command": req.command},
+        ip_address=request.client.host if request.client else None,
+    )
+
+    return PreprocessingResponse(task_id=task_id, status="dispatched", message="Preprocessing task dispatched")
