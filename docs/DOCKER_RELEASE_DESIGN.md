@@ -489,6 +489,7 @@ def build_and_push_release(
 ```
 
 3. **Add Build Args**
+{% raw %}
 ```tsx
 <FormField label="Build Arguments (Optional)">
   <KeyValueEditor
@@ -498,6 +499,7 @@ def build_and_push_release(
   />
 </FormField>
 ```
+{% endraw %}
 
 4. **Submit Handler**
 ```tsx
@@ -531,6 +533,7 @@ const handleSubmit = async (e: FormEvent) => {
 
 **File:** `Docker Release Registry/src/components/BuildMonitor.tsx`
 
+{% raw %}
 ```tsx
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
@@ -652,6 +655,7 @@ export function BuildMonitor() {
   );
 }
 ```
+{% endraw %}
 
 ---
 

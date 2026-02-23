@@ -363,7 +363,7 @@ docker build -t myregistry.com/llama-3-7b-companyA:v1.0-fp16 .
 docker push myregistry.com/llama-3-7b-companyA:v1.0-fp16
 
 # Get digest
-DIGEST=$(docker inspect --format='{{.RepoDigests}}' myregistry.com/llama-3-7b-companyA:v1.0-fp16)
+DIGEST=$(docker inspect --format='{% raw %}{{.RepoDigests}}{% endraw %}' myregistry.com/llama-3-7b-companyA:v1.0-fp16)
 ```
 
 ### 3. Create Release
